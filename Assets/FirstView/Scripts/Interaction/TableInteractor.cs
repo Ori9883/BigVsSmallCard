@@ -53,6 +53,7 @@ namespace FirstView
 
         private Card3D hoveredCard;
         private CardSlot hoveredSlot;
+        private DiscardPile hoveredDiscardPile;
         private readonly RaycastHit[] hits = new RaycastHit[8];
         private int hoverCount;
 
@@ -67,6 +68,7 @@ namespace FirstView
         public System.Action<Card3D, CardSlot> OnCardPlaced;
         public System.Action<Card3D> OnCardDeselected;
         public System.Action<string> OnEnvironmentClicked;
+        public System.Action<DiscardPile> OnDiscardPileClicked;
 
         private void Awake()
         {
@@ -118,6 +120,8 @@ namespace FirstView
                 if (card != null && card.isActiveAndEnabled && card != selectedCard)
                 {
                     hoveredCard = card;
+                    if (card.owningPile != null)
+                        hoveredDiscardPile = card.owningPile;
                     card.SetHover(true);
                     card.SetEmissionGlow(true, new Color(0.4f, 0.35f, 0.15f));
                     return;
@@ -128,6 +132,13 @@ namespace FirstView
                 {
                     hoveredSlot = slot;
                     slot.SetHighlight(true);
+                    return;
+                }
+
+                var pile = FindDiscardPileInHierarchy(hits[i].collider);
+                if (pile != null)
+                {
+                    hoveredDiscardPile = pile;
                     return;
                 }
 
@@ -150,11 +161,12 @@ namespace FirstView
                 hoveredSlot.SetHighlight(false);
                 hoveredSlot = null;
             }
+            hoveredDiscardPile = null;
         }
 
         private void UpdateCursor()
         {
-            bool showHover = hoveredCard != null || hoveredSlot != null;
+            bool showHover = hoveredCard != null || hoveredSlot != null || hoveredDiscardPile != null;
             if (showHover && hoverCursor != null)
                 Cursor.SetCursor(hoverCursor, cursorHotspot, CursorMode.Auto);
             else if (!showHover && defaultCursor != null)
@@ -173,10 +185,20 @@ namespace FirstView
                 return;
             }
 
-            // Priority 2: click a hand card → select it
+            // Priority 2: click a hand card → select it; click discard pile card → toggle expand
             if (hoveredCard != null)
             {
-                OnCardClicked?.Invoke(hoveredCard);
+                if (hoveredDiscardPile != null)
+                    OnDiscardPileClicked?.Invoke(hoveredDiscardPile);
+                else
+                    OnCardClicked?.Invoke(hoveredCard);
+                return;
+            }
+
+            // Priority 2.5: click discard pile area (empty pile collider)
+            if (hoveredDiscardPile != null)
+            {
+                OnDiscardPileClicked?.Invoke(hoveredDiscardPile);
                 return;
             }
 
@@ -236,6 +258,15 @@ namespace FirstView
             if (slot != null) return slot;
             var parent = col.transform.parent;
             if (parent != null) return parent.GetComponent<CardSlot>();
+            return null;
+        }
+
+        private static DiscardPile FindDiscardPileInHierarchy(Collider col)
+        {
+            var pile = col.GetComponent<DiscardPile>();
+            if (pile != null) return pile;
+            var parent = col.transform.parent;
+            if (parent != null) return parent.GetComponent<DiscardPile>();
             return null;
         }
 

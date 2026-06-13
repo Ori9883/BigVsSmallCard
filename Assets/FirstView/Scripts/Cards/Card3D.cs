@@ -32,6 +32,8 @@ namespace FirstView
         public CardFacing facing = CardFacing.FacePlayer;
         public Transform faceTarget;
 
+        [System.NonSerialized] public DiscardPile owningPile;
+
         private Vector3 basePosition;
         private Quaternion baseRotation;
         private bool isHovered;
@@ -48,6 +50,8 @@ namespace FirstView
             transform.localScale = Vector3.one * globalScale;
             ResolveFrontBack();
             ApplySprites();
+            if (frontRoot != null) frontRoot.SetActive(true);
+            if (backRoot != null) backRoot.SetActive(true);
         }
 
         private void LateUpdate()
@@ -79,6 +83,9 @@ namespace FirstView
 
                 case CardFacing.FaceUp:
                     return Quaternion.Euler(90f, 0f, 0f);
+
+                case CardFacing.FaceDown:
+                    return Quaternion.Euler(90f, 0f, 0f) * Quaternion.Euler(0f, 180f, 0f);
 
                 default:
                     return Quaternion.identity;
@@ -132,18 +139,6 @@ namespace FirstView
             if (backImage != null) backImage.sprite = sprite;
         }
 
-        public void ShowFront(bool show)
-        {
-            if (frontRoot != null) frontRoot.SetActive(show);
-            if (backRoot != null) backRoot.SetActive(!show);
-        }
-
-        public void ShowBothSides()
-        {
-            if (frontRoot != null) frontRoot.SetActive(true);
-            if (backRoot != null) backRoot.SetActive(true);
-        }
-
         public void SetBasePose(Vector3 position, Quaternion rotation)
         {
             basePosition = position;
@@ -176,13 +171,13 @@ namespace FirstView
         public void PlayFaceDown(Vector3 targetPos, Quaternion targetRot)
         {
             if (activeAnim != null) StopCoroutine(activeAnim);
-            ShowFront(false);
             activeAnim = StartCoroutine(FaceDownSequence(targetPos, targetRot));
         }
 
         public void FlipReveal(System.Action onComplete = null)
         {
             hoverLocked = true;
+            facing = CardFacing.FaceUp;
             if (activeAnim != null) StopCoroutine(activeAnim);
             activeAnim = StartCoroutine(FlipRevealSequence(onComplete));
         }
@@ -235,7 +230,6 @@ namespace FirstView
 
             Quaternion restRot = ComputeFacingRotation();
             transform.SetPositionAndRotation(fromPos, fromRot);
-            ShowBothSides();
 
             float duration = 0.55f;
             float elapsed = 0f;
@@ -257,7 +251,6 @@ namespace FirstView
             }
 
             transform.SetPositionAndRotation(basePosition, restRot);
-            ShowBothSides();
             activeAnim = null;
         }
 
@@ -388,13 +381,10 @@ namespace FirstView
                 float t = Mathf.Clamp01(elapsed / duration);
                 float flip = Mathf.Lerp(180f, 0f, t);
 
-                if (t > 0.5f) ShowFront(true);
-
                 transform.rotation = restRot * Quaternion.Euler(0f, flip, 0f);
                 yield return null;
             }
 
-            ShowFront(true);
             transform.rotation = restRot;
             hoverLocked = false;
             activeAnim = null;
@@ -408,6 +398,7 @@ namespace FirstView
     {
         FacePlayer,
         FaceUp,
+        FaceDown,
         FaceEnemy
     }
 

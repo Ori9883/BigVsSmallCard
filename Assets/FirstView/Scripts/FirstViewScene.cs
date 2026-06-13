@@ -195,7 +195,6 @@ namespace FirstView
                     Card3D card = CreateCard(gc);
                     card.facing = CardFacing.FaceEnemy;
                     card.faceTarget = opponentTransform;
-                    card.ShowFront(false);
 
                     float normalizedPos = (float)i / Mathf.Max(1, enemyCount - 1) - 0.5f;
                     float xOffset = normalizedPos * handCardSpacing * (enemyCount - 1);
@@ -240,8 +239,6 @@ namespace FirstView
             if (front != null) card.SetFrontSprite(front);
             if (back != null) card.SetBackSprite(back);
 
-            card.ShowBothSides();
-
             return card;
         }
 
@@ -283,11 +280,10 @@ namespace FirstView
 
             Card3D card = enemyHandCards[aiPick];
             enemyHandCards.RemoveAt(aiPick);
-            card.facing = CardFacing.FaceUp;
+            card.facing = CardFacing.FaceDown;
             card.SetSlotTransform(enemyFieldSlots[0].transform);
             enemyFieldSlots[0].PlaceCard(card);
             enemyFieldCard = card;
-            card.ShowFront(false);
 
             session.SetPlayedIndex(false, aiPick);
             session.OnCardPlayed(false);
@@ -341,16 +337,11 @@ namespace FirstView
             interactor.OnCardPlaced += HandleCardPlaced;
             interactor.OnCardDeselected += HandleCardDeselected;
             interactor.OnEnvironmentClicked += HandleEnvironmentClicked;
+            interactor.OnDiscardPileClicked += HandleDiscardPileClicked;
         }
 
         private void HandleCardClicked(Card3D card)
         {
-            if (discardPile != null && card == null)
-            {
-                discardPile.ToggleExpand();
-                return;
-            }
-
             bool isPlayerTurn = (session.PlayerIsFirst && session.Phase == RoundPhase.FirstTurn)
                              || (!session.PlayerIsFirst && session.Phase == RoundPhase.SecondTurn);
 
@@ -363,6 +354,11 @@ namespace FirstView
             }
         }
 
+        private void HandleDiscardPileClicked(DiscardPile pile)
+        {
+            pile.ToggleExpand();
+        }
+
         private void HandleCardPlaced(Card3D card, CardSlot slot)
         {
             if (!handCards.Contains(card)) return;
@@ -371,10 +367,9 @@ namespace FirstView
 
             playerPlayedHandIndex = handCards.IndexOf(card);
             handCards.Remove(card);
-            card.facing = CardFacing.FaceUp;
+            card.facing = CardFacing.FaceDown;
             card.SetSlotTransform(slot.transform);
             slot.PlaceCard(card);
-            card.ShowFront(false);
             playerFieldCard = card;
             RearrangeHand();
             HighlightPlayerSlots(false);
@@ -432,6 +427,7 @@ namespace FirstView
                 interactor.OnCardPlaced -= HandleCardPlaced;
                 interactor.OnCardDeselected -= HandleCardDeselected;
                 interactor.OnEnvironmentClicked -= HandleEnvironmentClicked;
+                interactor.OnDiscardPileClicked -= HandleDiscardPileClicked;
             }
             if (session != null)
             {
