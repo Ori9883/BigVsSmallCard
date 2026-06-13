@@ -38,6 +38,7 @@ namespace FirstView
         private float breathPhase;
 
         public string CurrentFocusId { get; private set; }
+        public int CurrentFocusIndex { get; private set; }
         public bool IsTransitioning => isTransitioning;
 
         private void Awake()
@@ -48,6 +49,7 @@ namespace FirstView
 
         public void Initialize(string defaultFocusId)
         {
+            CurrentFocusIndex = FindTargetIndex(defaultFocusId);
             FocusToImmediate(defaultFocusId);
         }
 
@@ -61,12 +63,27 @@ namespace FirstView
             }
 
             CurrentFocusId = id;
+            CurrentFocusIndex = FindTargetIndex(id);
             targetPosition = target.anchor.position;
             targetRotation = target.anchor.rotation;
             targetFov = target.fov;
             isTransitioning = true;
             posVelocity = Vector3.zero;
             fovVelocity = 0f;
+        }
+
+        public void FocusNext()
+        {
+            if (targets == null || targets.Length == 0) return;
+            int next = (CurrentFocusIndex + 1) % targets.Length;
+            FocusTo(targets[next].id);
+        }
+
+        public void FocusPrev()
+        {
+            if (targets == null || targets.Length == 0) return;
+            int prev = (CurrentFocusIndex - 1 + targets.Length) % targets.Length;
+            FocusTo(targets[prev].id);
         }
 
         public void FocusToImmediate(string id)
@@ -135,6 +152,16 @@ namespace FirstView
                 if (targets[i].id == id) return targets[i];
             }
             return null;
+        }
+
+        private int FindTargetIndex(string id)
+        {
+            if (targets == null) return 0;
+            for (int i = 0; i < targets.Length; i++)
+            {
+                if (targets[i].id == id) return i;
+            }
+            return 0;
         }
 
         private float GetCurrentSmoothTime()

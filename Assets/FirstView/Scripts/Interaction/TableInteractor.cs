@@ -89,9 +89,17 @@ namespace FirstView
             {
                 if (HasSelection)
                     Deselect();
-                else
-                    cameraRig.FocusTo("Idle");
             }
+
+#if ENABLE_INPUT_SYSTEM
+            if (Keyboard.current != null)
+            {
+                if (Keyboard.current.wKey.wasPressedThisFrame)
+                    cameraRig.FocusNext();
+                if (Keyboard.current.sKey.wasPressedThisFrame)
+                    cameraRig.FocusPrev();
+            }
+#endif
         }
 
         private void DetectHover()

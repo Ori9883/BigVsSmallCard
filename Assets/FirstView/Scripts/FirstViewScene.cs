@@ -65,7 +65,7 @@ namespace FirstView
             CreateFieldSlots();
             DealCards();
             WireInteraction();
-            cameraRig.Initialize("Idle");
+            cameraRig.Initialize("Hand");
         }
 
         private static Transform EnsureEntity(string name, Vector3 pos)
