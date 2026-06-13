@@ -3,18 +3,14 @@ using System.Collections;
 
 namespace FirstView
 {
-    /// <summary>
-    /// A 3D card sitting on the table.
-    /// Supports hover-lift, draw, place, and flip animations.
-    /// Card face info is rendered via a child WorldSpace Canvas.
-    /// </summary>
-    [RequireComponent(typeof(BoxCollider))]
     public class Card3D : MonoBehaviour
     {
-        [Header("Visuals")]
+        [Header("Prefab References")]
         [SerializeField] private MeshRenderer cardMeshRenderer;
-        [SerializeField] private Transform visualRoot;
-        [SerializeField] private GameObject infoPanel;
+        [SerializeField] private GameObject frontRoot;
+        [SerializeField] private GameObject backRoot;
+        [SerializeField] private UnityEngine.UI.Image frontImage;
+        [SerializeField] private UnityEngine.UI.Image backImage;
 
         [Header("Card Data")]
         public string cardId;
@@ -24,16 +20,23 @@ namespace FirstView
         public string ability = "";
         public int cost;
         public CardRarity rarity = CardRarity.Common;
+        public Sprite frontSprite;
+        public Sprite backSprite;
 
         [Header("Animation")]
-        [SerializeField] private float hoverLiftHeight = 0.12f;
-        [SerializeField] private float hoverTiltAngle = 8f;
+        [SerializeField] private float hoverLiftHeight = 0.003f;
+        [SerializeField] private float hoverTiltAngle = 5f;
         [SerializeField] private float animSmoothTime = 0.12f;
+        [SerializeField] private float globalScale = 0.1f;
+
+        public CardFacing facing = CardFacing.FacePlayer;
+        public Transform faceTarget;
 
         private Vector3 basePosition;
         private Quaternion baseRotation;
         private bool isHovered;
         private Coroutine activeAnim;
+        private Transform cachedSlotTransform;
 
         public bool IsHovered => isHovered;
         public Vector3 BasePosition => basePosition;
@@ -41,13 +44,97 @@ namespace FirstView
         private void Awake()
         {
             if (cardMeshRenderer == null) cardMeshRenderer = GetComponentInChildren<MeshRenderer>();
-            if (visualRoot == null) visualRoot = transform;
+            transform.localScale = Vector3.one * globalScale;
+            ResolveFrontBack();
+            ApplySprites();
+        }
 
-            var collider = GetComponent<BoxCollider>();
-            collider.size = new Vector3(0.52f, 0.001f, 0.72f);
-            collider.center = new Vector3(0f, 0.001f, 0f);
+        private void LateUpdate()
+        {
+            if (activeAnim != null) return;
 
-            if (infoPanel != null) infoPanel.SetActive(false);
+            transform.position = isHovered
+                ? basePosition + Vector3.up * hoverLiftHeight
+                : basePosition;
+
+            transform.rotation = ComputeFacingRotation();
+        }
+
+        private Quaternion ComputeFacingRotation()
+        {
+            switch (facing)
+            {
+                case CardFacing.FacePlayer:
+                case CardFacing.FaceEnemy:
+                {
+                    Transform target = faceTarget;
+                    if (target == null) return Quaternion.identity;
+                    Vector3 toTarget = basePosition - target.position;
+                    toTarget.y = 0f;
+                    if (toTarget.sqrMagnitude > 0.0001f)
+                        return Quaternion.LookRotation(toTarget.normalized, Vector3.up);
+                    return Quaternion.identity;
+                }
+
+                case CardFacing.FaceUp:
+                    return Quaternion.Euler(90f, 0f, 0f);
+
+                default:
+                    return Quaternion.identity;
+            }
+        }
+
+        public void SetSlotTransform(Transform slot)
+        {
+            cachedSlotTransform = slot;
+        }
+
+        private void ResolveFrontBack()
+        {
+            if (frontRoot != null && backRoot != null) return;
+
+            for (int i = 0; i < transform.childCount; i++)
+            {
+                var child = transform.GetChild(i);
+                var canvas = child.GetComponent<Canvas>();
+                if (canvas == null) continue;
+
+                if (frontRoot == null && child.localPosition.z < 0f)
+                    frontRoot = child.gameObject;
+                else if (backRoot == null && child.localPosition.z > 0f)
+                    backRoot = child.gameObject;
+            }
+
+            if (frontRoot != null && frontImage == null)
+                frontImage = frontRoot.GetComponentInChildren<UnityEngine.UI.Image>();
+            if (backRoot != null && backImage == null)
+                backImage = backRoot.GetComponentInChildren<UnityEngine.UI.Image>();
+        }
+
+        private void ApplySprites()
+        {
+            if (frontImage != null && frontSprite != null)
+                frontImage.sprite = frontSprite;
+            if (backImage != null && backSprite != null)
+                backImage.sprite = backSprite;
+        }
+
+        public void SetFrontSprite(Sprite sprite)
+        {
+            frontSprite = sprite;
+            if (frontImage != null) frontImage.sprite = sprite;
+        }
+
+        public void SetBackSprite(Sprite sprite)
+        {
+            backSprite = sprite;
+            if (backImage != null) backImage.sprite = sprite;
+        }
+
+        public void ShowFront(bool show)
+        {
+            if (frontRoot != null) frontRoot.SetActive(true);
+            if (backRoot != null) backRoot.SetActive(true);
         }
 
         public void SetBasePose(Vector3 position, Quaternion rotation)
@@ -61,8 +148,6 @@ namespace FirstView
         {
             if (isHovered == hovered) return;
             isHovered = hovered;
-
-            if (infoPanel != null) infoPanel.SetActive(hovered);
 
             if (activeAnim != null) StopCoroutine(activeAnim);
             activeAnim = StartCoroutine(AnimateHover(hovered));
@@ -92,14 +177,6 @@ namespace FirstView
             activeAnim = StartCoroutine(DeathSequence());
         }
 
-        public void SetCardBackVisible(bool showBack)
-        {
-            // Flip the visual root 180 degrees on Y if showing back
-            Vector3 euler = visualRoot.localEulerAngles;
-            euler.y = showBack ? 180f : 0f;
-            visualRoot.localEulerAngles = euler;
-        }
-
         public void SetEmissionGlow(bool on, Color? color = null)
         {
             if (cardMeshRenderer == null) return;
@@ -108,8 +185,7 @@ namespace FirstView
                 if (on)
                 {
                     mat.EnableKeyword("_EMISSION");
-                    if (color.HasValue) mat.SetColor("_EmissionColor", color.Value);
-                    else mat.SetColor("_EmissionColor", new Color(0.3f, 0.25f, 0.1f));
+                    mat.SetColor("_EmissionColor", color ?? new Color(0.3f, 0.25f, 0.1f));
                 }
                 else
                 {
@@ -123,9 +199,10 @@ namespace FirstView
         private IEnumerator AnimateHover(bool lift)
         {
             Vector3 targetPos = lift ? basePosition + Vector3.up * hoverLiftHeight : basePosition;
+            Quaternion restRot = ComputeFacingRotation();
             Quaternion targetRot = lift
-                ? Quaternion.Euler(baseRotation.eulerAngles.x - hoverTiltAngle, baseRotation.eulerAngles.y, 0f)
-                : baseRotation;
+                ? Quaternion.Euler(restRot.eulerAngles.x - hoverTiltAngle, restRot.eulerAngles.y, 0f)
+                : restRot;
 
             yield return SmoothTransform(targetPos, targetRot, animSmoothTime);
         }
@@ -134,7 +211,10 @@ namespace FirstView
         {
             if (delay > 0f) yield return new WaitForSeconds(delay);
 
+            Quaternion restRot = ComputeFacingRotation();
             transform.SetPositionAndRotation(fromPos, fromRot);
+            ShowFront(false);
+
             float duration = 0.55f;
             float elapsed = 0f;
 
@@ -149,11 +229,15 @@ namespace FirstView
                 transform.position = pos;
 
                 float flip = Mathf.Lerp(180f, 0f, ease);
-                transform.rotation = baseRotation * Quaternion.Euler(0f, flip, 0f);
+                transform.rotation = restRot * Quaternion.Euler(0f, flip, 0f);
+
+                if (ease > 0.5f) ShowFront(true);
+
                 yield return null;
             }
 
-            transform.SetPositionAndRotation(basePosition, baseRotation);
+            transform.SetPositionAndRotation(basePosition, restRot);
+            ShowFront(true);
             activeAnim = null;
         }
 
@@ -162,6 +246,7 @@ namespace FirstView
             basePosition = targetPos;
             baseRotation = targetRot;
 
+            Quaternion restRot = ComputeFacingRotation();
             float duration = 0.35f;
             float elapsed = 0f;
             Vector3 startPos = transform.position;
@@ -175,11 +260,11 @@ namespace FirstView
 
                 Vector3 pos = Vector3.Lerp(startPos, targetPos, ease);
                 pos.y += Mathf.Sin(ease * Mathf.PI) * 0.15f;
-                transform.SetPositionAndRotation(pos, Quaternion.Slerp(startRot, targetRot, ease));
+                transform.SetPositionAndRotation(pos, Quaternion.Slerp(startRot, restRot, ease));
                 yield return null;
             }
 
-            transform.SetPositionAndRotation(targetPos, targetRot);
+            transform.SetPositionAndRotation(targetPos, restRot);
             activeAnim = null;
         }
 
@@ -212,7 +297,6 @@ namespace FirstView
             {
                 elapsed += Time.deltaTime;
                 float t = Mathf.Clamp01(elapsed / duration);
-                // Shrink and sink
                 transform.localScale = Vector3.Lerp(startScale, Vector3.zero, t * t);
                 Vector3 sinkPos = basePosition;
                 sinkPos.y -= t * 0.05f;
@@ -247,6 +331,13 @@ namespace FirstView
         }
 
         #endregion
+    }
+
+    public enum CardFacing
+    {
+        FacePlayer,
+        FaceUp,
+        FaceEnemy
     }
 
     public enum CardRarity
