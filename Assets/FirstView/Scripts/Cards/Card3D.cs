@@ -133,6 +133,12 @@ namespace FirstView
 
         public void ShowFront(bool show)
         {
+            if (frontRoot != null) frontRoot.SetActive(show);
+            if (backRoot != null) backRoot.SetActive(!show);
+        }
+
+        public void ShowBothSides()
+        {
             if (frontRoot != null) frontRoot.SetActive(true);
             if (backRoot != null) backRoot.SetActive(true);
         }
@@ -213,7 +219,7 @@ namespace FirstView
 
             Quaternion restRot = ComputeFacingRotation();
             transform.SetPositionAndRotation(fromPos, fromRot);
-            ShowFront(false);
+            ShowBothSides();
 
             float duration = 0.55f;
             float elapsed = 0f;
@@ -231,13 +237,11 @@ namespace FirstView
                 float flip = Mathf.Lerp(180f, 0f, ease);
                 transform.rotation = restRot * Quaternion.Euler(0f, flip, 0f);
 
-                if (ease > 0.5f) ShowFront(true);
-
                 yield return null;
             }
 
             transform.SetPositionAndRotation(basePosition, restRot);
-            ShowFront(true);
+            ShowBothSides();
             activeAnim = null;
         }
 
