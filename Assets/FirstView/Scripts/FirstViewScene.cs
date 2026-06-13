@@ -1,6 +1,5 @@
 using UnityEngine;
 using System.Collections.Generic;
-
 using FirstView.Gameplay;
 
 namespace FirstView
@@ -39,13 +38,18 @@ namespace FirstView
         [SerializeField] private float fieldSlotSpacing = 0.08f;
         [SerializeField] private int fieldSlotsPerSide = 1;
 
+        [Header("Discard Pile")]
+        [SerializeField] private DiscardPile discardPile;
+
         private readonly List<Card3D> handCards = new List<Card3D>();
         private readonly List<Card3D> enemyHandCards = new List<Card3D>();
-        private readonly List<Card3D> enemyFieldCards = new List<Card3D>();
         private readonly List<CardSlot> myFieldSlots = new List<CardSlot>();
         private readonly List<CardSlot> enemyFieldSlots = new List<CardSlot>();
         private GameSession session;
         private Card3D pendingSelectedCard;
+        private Card3D playerFieldCard;
+        private Card3D enemyFieldCard;
+        private int playerPlayedHandIndex;
         private GameObject cardPrefabInstance;
         private Transform playerTransform;
         private Transform opponentTransform;
@@ -53,7 +57,6 @@ namespace FirstView
         private void Start()
         {
             session = gameObject.AddComponent<GameSession>();
-            session.Deal();
 
             cardPrefabInstance = Resources.Load<GameObject>(cardPrefabResourcePath);
             if (cardPrefabInstance == null)
@@ -63,9 +66,10 @@ namespace FirstView
             opponentTransform = EnsureEntity("Opponent", new Vector3(0f, 1.2f, 1.5f));
 
             CreateFieldSlots();
-            DealCards();
+            WireSession();
             WireInteraction();
             cameraRig.Initialize("Hand");
+            session.BeginGame();
         }
 
         private static Transform EnsureEntity(string name, Vector3 pos)
@@ -156,7 +160,7 @@ namespace FirstView
 
         private void DealCards()
         {
-            if (!session.IsDealt) return;
+            if (session.PlayerHand == null) return;
 
             int playerCount = session.PlayerHand.Count;
             for (int i = 0; i < playerCount; i++)
@@ -241,6 +245,94 @@ namespace FirstView
             return card;
         }
 
+        private void WireSession()
+        {
+            session.OnRoundStart += HandleRoundStart;
+            session.OnTurnStart += HandleTurnStart;
+            session.OnBothCardsPlayed += HandleBothCardsPlayed;
+            session.OnSettled += HandleSettled;
+        }
+
+        private void HandleRoundStart()
+        {
+            ClearFieldCards();
+            if (handCards.Count == 0 && enemyHandCards.Count == 0)
+                DealCards();
+        }
+
+        private void HandleTurnStart(bool isPlayerTurn)
+        {
+            if (!isPlayerTurn)
+                StartCoroutine(EnemyPlayCoroutine());
+        }
+
+        private System.Collections.IEnumerator EnemyPlayCoroutine()
+        {
+            yield return new UnityEngine.WaitForSeconds(1f);
+            EnemyPlay();
+        }
+
+        private void EnemyPlay()
+        {
+            if (session.Phase != RoundPhase.FirstTurn && session.Phase != RoundPhase.SecondTurn) return;
+            if (session.PlayerIsFirst && session.Phase == RoundPhase.FirstTurn) return;
+            if (!session.PlayerIsFirst && session.Phase == RoundPhase.SecondTurn) return;
+
+            int aiPick = FirstView.Gameplay.EnemyAI.PickCardIndex(session.EnemyHand);
+            if (aiPick < 0) return;
+
+            Card3D card = enemyHandCards[aiPick];
+            enemyHandCards.RemoveAt(aiPick);
+            card.facing = CardFacing.FaceUp;
+            card.SetSlotTransform(enemyFieldSlots[0].transform);
+            enemyFieldSlots[0].PlaceCard(card);
+            enemyFieldCard = card;
+            card.ShowFront(false);
+
+            session.SetPlayedIndex(false, aiPick);
+            session.OnCardPlayed(false);
+        }
+
+        private void HandleBothCardsPlayed()
+        {
+            StartCoroutine(RevealCoroutine());
+        }
+
+        private System.Collections.IEnumerator RevealCoroutine()
+        {
+            yield return new UnityEngine.WaitForSeconds(0.5f);
+
+            if (playerFieldCard != null) playerFieldCard.FlipReveal();
+            if (enemyFieldCard != null) enemyFieldCard.FlipReveal();
+
+            // Flip takes 0.4s; wait for flip + display time
+            yield return new UnityEngine.WaitForSeconds(1.2f);
+
+            session.Settle();
+        }
+
+        private void HandleSettled(int result, int score, int round)
+        {
+            if (discardPile != null)
+            {
+                if (playerFieldCard != null) discardPile.AddCard(playerFieldCard);
+                if (enemyFieldCard != null) discardPile.AddCard(enemyFieldCard);
+            }
+            playerFieldCard = null;
+            enemyFieldCard = null;
+        }
+
+        private void ClearFieldCards()
+        {
+            if (playerFieldCard != null && discardPile != null) discardPile.AddCard(playerFieldCard);
+            if (enemyFieldCard != null && discardPile != null) discardPile.AddCard(enemyFieldCard);
+            playerFieldCard = null;
+            enemyFieldCard = null;
+
+            foreach (var slot in myFieldSlots) slot.RemoveCard();
+            foreach (var slot in enemyFieldSlots) slot.RemoveCard();
+        }
+
         private void WireInteraction()
         {
             if (interactor == null) return;
@@ -253,16 +345,21 @@ namespace FirstView
 
         private void HandleCardClicked(Card3D card)
         {
-            if (handCards.Contains(card))
+            if (discardPile != null && card == null)
+            {
+                discardPile.ToggleExpand();
+                return;
+            }
+
+            bool isPlayerTurn = (session.PlayerIsFirst && session.Phase == RoundPhase.FirstTurn)
+                             || (!session.PlayerIsFirst && session.Phase == RoundPhase.SecondTurn);
+
+            if (isPlayerTurn && handCards.Contains(card))
             {
                 interactor.SelectCard(card);
                 pendingSelectedCard = card;
                 cameraRig.FocusTo("MyField");
                 HighlightPlayerSlots(true);
-            }
-            else if (enemyFieldCards.Contains(card))
-            {
-                cameraRig.FocusTo("EnemyField");
             }
         }
 
@@ -272,15 +369,19 @@ namespace FirstView
             if (!myFieldSlots.Contains(slot)) return;
             if (slot.isOccupied) return;
 
+            playerPlayedHandIndex = handCards.IndexOf(card);
             handCards.Remove(card);
             card.facing = CardFacing.FaceUp;
             card.SetSlotTransform(slot.transform);
             slot.PlaceCard(card);
+            card.ShowFront(false);
+            playerFieldCard = card;
             RearrangeHand();
             HighlightPlayerSlots(false);
             pendingSelectedCard = null;
 
-            Debug.Log($"[FirstView] Placed {card.cardName} into {slot.slotId}");
+            session.SetPlayedIndex(true, playerPlayedHandIndex);
+            session.OnCardPlayed(true);
         }
 
         private void HandleCardDeselected(Card3D _)
@@ -331,6 +432,13 @@ namespace FirstView
                 interactor.OnCardPlaced -= HandleCardPlaced;
                 interactor.OnCardDeselected -= HandleCardDeselected;
                 interactor.OnEnvironmentClicked -= HandleEnvironmentClicked;
+            }
+            if (session != null)
+            {
+                session.OnRoundStart -= HandleRoundStart;
+                session.OnTurnStart -= HandleTurnStart;
+                session.OnBothCardsPlayed -= HandleBothCardsPlayed;
+                session.OnSettled -= HandleSettled;
             }
         }
     }

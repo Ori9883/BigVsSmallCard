@@ -35,6 +35,7 @@ namespace FirstView
         private Vector3 basePosition;
         private Quaternion baseRotation;
         private bool isHovered;
+        private bool hoverLocked;
         private Coroutine activeAnim;
         private Transform cachedSlotTransform;
 
@@ -152,6 +153,7 @@ namespace FirstView
 
         public void SetHover(bool hovered)
         {
+            if (hoverLocked) return;
             if (isHovered == hovered) return;
             isHovered = hovered;
 
@@ -169,6 +171,20 @@ namespace FirstView
         {
             if (activeAnim != null) StopCoroutine(activeAnim);
             activeAnim = StartCoroutine(PlaceSequence(targetPos, targetRot));
+        }
+
+        public void PlayFaceDown(Vector3 targetPos, Quaternion targetRot)
+        {
+            if (activeAnim != null) StopCoroutine(activeAnim);
+            ShowFront(false);
+            activeAnim = StartCoroutine(FaceDownSequence(targetPos, targetRot));
+        }
+
+        public void FlipReveal(System.Action onComplete = null)
+        {
+            hoverLocked = true;
+            if (activeAnim != null) StopCoroutine(activeAnim);
+            activeAnim = StartCoroutine(FlipRevealSequence(onComplete));
         }
 
         public void PlayAttackAnimation()
@@ -332,6 +348,57 @@ namespace FirstView
 
             transform.SetPositionAndRotation(targetPos, targetRot);
             activeAnim = null;
+        }
+
+        private IEnumerator FaceDownSequence(Vector3 targetPos, Quaternion targetRot)
+        {
+            basePosition = targetPos;
+            baseRotation = targetRot;
+
+            float duration = 0.35f;
+            float elapsed = 0f;
+            Vector3 startPos = transform.position;
+            Quaternion startRot = transform.rotation;
+
+            while (elapsed < duration)
+            {
+                elapsed += Time.deltaTime;
+                float t = Mathf.Clamp01(elapsed / duration);
+                float ease = t * t * (3f - 2f * t);
+
+                Vector3 pos = Vector3.Lerp(startPos, targetPos, ease);
+                pos.y += Mathf.Sin(ease * Mathf.PI) * 0.05f;
+                transform.SetPositionAndRotation(pos, Quaternion.Slerp(startRot, targetRot, ease));
+                yield return null;
+            }
+
+            transform.SetPositionAndRotation(targetPos, targetRot);
+            activeAnim = null;
+        }
+
+        private IEnumerator FlipRevealSequence(System.Action onComplete)
+        {
+            Quaternion restRot = ComputeFacingRotation();
+            float duration = 0.4f;
+            float elapsed = 0f;
+
+            while (elapsed < duration)
+            {
+                elapsed += Time.deltaTime;
+                float t = Mathf.Clamp01(elapsed / duration);
+                float flip = Mathf.Lerp(180f, 0f, t);
+
+                if (t > 0.5f) ShowFront(true);
+
+                transform.rotation = restRot * Quaternion.Euler(0f, flip, 0f);
+                yield return null;
+            }
+
+            ShowFront(true);
+            transform.rotation = restRot;
+            hoverLocked = false;
+            activeAnim = null;
+            onComplete?.Invoke();
         }
 
         #endregion
