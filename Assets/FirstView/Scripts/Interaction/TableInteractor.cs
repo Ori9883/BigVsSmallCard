@@ -56,11 +56,16 @@ namespace FirstView
         private readonly RaycastHit[] hits = new RaycastHit[8];
         private int hoverCount;
 
+        private Card3D selectedCard;
+        private bool HasSelection => selectedCard != null;
+
+        public Card3D SelectedCard => selectedCard;
         public Card3D HoveredCard => hoveredCard;
         public CardSlot HoveredSlot => hoveredSlot;
 
         public System.Action<Card3D> OnCardClicked;
-        public System.Action<CardSlot> OnSlotClicked;
+        public System.Action<Card3D, CardSlot> OnCardPlaced;
+        public System.Action<Card3D> OnCardDeselected;
         public System.Action<string> OnEnvironmentClicked;
 
         private void Awake()
@@ -81,7 +86,12 @@ namespace FirstView
                 HandleClick();
 
             if (GetMouseButtonDown(1) || GetKeyDown(KeyCode.Escape))
-                cameraRig.FocusTo("Idle");
+            {
+                if (HasSelection)
+                    Deselect();
+                else
+                    cameraRig.FocusTo("Idle");
+            }
         }
 
         private void DetectHover()
@@ -92,13 +102,12 @@ namespace FirstView
             Ray ray = cam.ScreenPointToRay(mousePos);
             hoverCount = Physics.RaycastNonAlloc(ray, hits, raycastDistance);
 
-            // Sort by distance (closest first)
             System.Array.Sort(hits, 0, hoverCount, new RaycastHitDistanceComparer());
 
             for (int i = 0; i < hoverCount; i++)
             {
-                var card = hits[i].collider.GetComponent<Card3D>();
-                if (card != null && card.isActiveAndEnabled)
+                var card = FindCardInHierarchy(hits[i].collider);
+                if (card != null && card.isActiveAndEnabled && card != selectedCard)
                 {
                     hoveredCard = card;
                     card.SetHover(true);
@@ -106,7 +115,7 @@ namespace FirstView
                     return;
                 }
 
-                var slot = hits[i].collider.GetComponent<CardSlot>();
+                var slot = FindSlotInHierarchy(hits[i].collider);
                 if (slot != null && !slot.isOccupied)
                 {
                     hoveredSlot = slot;
@@ -137,40 +146,43 @@ namespace FirstView
 
         private void UpdateCursor()
         {
-            if (hoveredCard != null || hoveredSlot != null)
-            {
-                if (hoverCursor != null)
-                    Cursor.SetCursor(hoverCursor, cursorHotspot, CursorMode.Auto);
-                else
-                    Cursor.SetCursor(null, Vector2.zero, CursorMode.Auto);
-            }
+            bool showHover = hoveredCard != null || hoveredSlot != null;
+            if (showHover && hoverCursor != null)
+                Cursor.SetCursor(hoverCursor, cursorHotspot, CursorMode.Auto);
+            else if (!showHover && defaultCursor != null)
+                Cursor.SetCursor(defaultCursor, cursorHotspot, CursorMode.Auto);
             else
-            {
-                if (defaultCursor != null)
-                    Cursor.SetCursor(defaultCursor, cursorHotspot, CursorMode.Auto);
-                else
-                    Cursor.SetCursor(null, Vector2.zero, CursorMode.Auto);
-            }
+                Cursor.SetCursor(null, Vector2.zero, CursorMode.Auto);
         }
 
         private void HandleClick()
         {
+            // Priority 1: if we have a selected card and click a valid slot → place it
+            if (HasSelection && hoveredSlot != null && hoveredSlot.owner == SlotOwner.Player)
+            {
+                OnCardPlaced?.Invoke(selectedCard, hoveredSlot);
+                Deselect();
+                return;
+            }
+
+            // Priority 2: click a hand card → select it
             if (hoveredCard != null)
             {
                 OnCardClicked?.Invoke(hoveredCard);
                 return;
             }
 
-            if (hoveredSlot != null)
+            // Priority 3: click empty space → deselect if selected, else check env
+            if (HasSelection)
             {
-                OnSlotClicked?.Invoke(hoveredSlot);
+                Deselect();
                 return;
             }
 
+            // Priority 4: environment click
             Vector3 mousePos = GetMousePosition();
             Ray ray = cam.ScreenPointToRay(mousePos);
             int count = Physics.RaycastNonAlloc(ray, hits, raycastDistance);
-
             for (int i = 0; i < count; i++)
             {
                 var zone = hits[i].collider.GetComponent<FocusZone>();
@@ -181,6 +193,42 @@ namespace FirstView
                     return;
                 }
             }
+        }
+
+        public void SelectCard(Card3D card)
+        {
+            if (selectedCard == card) return;
+            Deselect();
+            selectedCard = card;
+            selectedCard.SetHover(true);
+            selectedCard.SetEmissionGlow(true, new Color(0.6f, 0.5f, 0.15f));
+        }
+
+        public void Deselect()
+        {
+            if (selectedCard == null) return;
+            selectedCard.SetHover(false);
+            selectedCard.SetEmissionGlow(false);
+            selectedCard = null;
+            OnCardDeselected?.Invoke(selectedCard);
+        }
+
+        private static Card3D FindCardInHierarchy(Collider col)
+        {
+            var card = col.GetComponent<Card3D>();
+            if (card != null) return card;
+            var parent = col.transform.parent;
+            if (parent != null) return parent.GetComponent<Card3D>();
+            return null;
+        }
+
+        private static CardSlot FindSlotInHierarchy(Collider col)
+        {
+            var slot = col.GetComponent<CardSlot>();
+            if (slot != null) return slot;
+            var parent = col.transform.parent;
+            if (parent != null) return parent.GetComponent<CardSlot>();
+            return null;
         }
 
         private struct RaycastHitDistanceComparer : System.Collections.IComparer

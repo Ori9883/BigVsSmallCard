@@ -23,41 +23,64 @@ namespace FirstView
         [SerializeField] private Transform myFieldAnchor;
         [SerializeField] private Transform enemyFieldAnchor;
         [SerializeField] private Transform opponentAnchor;
+        [SerializeField] private Transform opponentHandAnchor;
         [SerializeField] private Transform deckPosition;
 
         [Header("Card Prefab")]
-        [SerializeField] private GameObject cardPrefab;
+        [SerializeField] private string cardPrefabResourcePath = "P_Card_Template";
+        [SerializeField] private string slotPrefabResourcePath = "P_CardSlot_Template";
         [SerializeField] private GameObject slotPrefab;
 
         [Header("Interaction")]
         [SerializeField] private TableInteractor interactor;
 
         [Header("Layout")]
-        [SerializeField] private float handCardSpacing = 0.55f;
-        [SerializeField] private float handFanAngle = 8f;
-        [SerializeField] private float handLiftY = 0.01f;
-        [SerializeField] private float fieldSlotSpacing = 0.6f;
-        [SerializeField] private int fieldSlotsPerSide = 4;
+        [SerializeField] private float handCardSpacing = 0.068f;
+        [SerializeField] private float handFanAngle = 6f;
+        [SerializeField] private float handLiftY = 0.001f;
+        [SerializeField] private float fieldSlotSpacing = 0.08f;
+        [SerializeField] private int fieldSlotsPerSide = 1;
 
         [Header("Mock")]
-        [SerializeField] private int mockHandSize = 5;
-        [SerializeField] private int mockFieldCards = 2;
+        [SerializeField] private int mockHandSize = 15;
+        [SerializeField] private int mockFieldCards = 0;
 
         private readonly List<Card3D> handCards = new List<Card3D>();
+        private readonly List<Card3D> enemyHandCards = new List<Card3D>();
         private readonly List<Card3D> enemyFieldCards = new List<Card3D>();
         private readonly List<CardSlot> myFieldSlots = new List<CardSlot>();
         private readonly List<CardSlot> enemyFieldSlots = new List<CardSlot>();
         private MockCardDB cardDB;
+        private Card3D pendingSelectedCard;
+        private GameObject cardPrefabInstance;
+        private Transform playerTransform;
+        private Transform opponentTransform;
 
         private void Start()
         {
             cardDB = MockCardDB.CreateDefault();
-            SetupFocusPoints();
+            cardPrefabInstance = Resources.Load<GameObject>(cardPrefabResourcePath);
+            if (cardPrefabInstance == null)
+                Debug.LogError("[FirstView] Card prefab not found at Resources/" + cardPrefabResourcePath);
+
+            playerTransform = EnsureEntity("Player", new Vector3(0f, 1.2f, -0.5f));
+            opponentTransform = EnsureEntity("Opponent", new Vector3(0f, 1.2f, 1.5f));
+
             CreateFieldSlots();
             DealMockCards();
             WireInteraction();
-
             cameraRig.Initialize("Idle");
+        }
+
+        private static Transform EnsureEntity(string name, Vector3 pos)
+        {
+            var go = GameObject.Find(name);
+            if (go == null)
+            {
+                go = new GameObject(name);
+                go.transform.position = pos;
+            }
+            return go.transform;
         }
 
         private void SetupFocusPoints()
@@ -88,9 +111,11 @@ namespace FirstView
         private void CreateSlot(Vector3 pos, Quaternion rot, SlotOwner owner, int index, List<CardSlot> list)
         {
             GameObject slotObj;
-            if (slotPrefab != null)
+            var slotTemplate = Resources.Load<GameObject>(slotPrefabResourcePath);
+            if (slotTemplate != null)
             {
-                slotObj = Instantiate(slotPrefab, pos, rot, tableSurface);
+                slotObj = Instantiate(slotTemplate, pos, rot, tableSurface);
+                slotObj.transform.localScale = Vector3.one * 0.1f;
             }
             else
             {
@@ -109,7 +134,7 @@ namespace FirstView
         {
             var obj = GameObject.CreatePrimitive(PrimitiveType.Quad);
             obj.transform.SetPositionAndRotation(pos, rot);
-            obj.transform.localScale = new Vector3(0.48f, 0.68f, 1f);
+            obj.transform.localScale = new Vector3(0.096f, 0.136f, 1f);
             obj.layer = LayerMask.NameToLayer("Default");
 
             // Remove collider from slot visual (we add BoxCollider for CardSlot)
@@ -137,52 +162,71 @@ namespace FirstView
         {
             if (cardDB == null || cardDB.cards == null || cardDB.cards.Length == 0) return;
 
-            // Deal hand cards with fan layout
             for (int i = 0; i < mockHandSize; i++)
             {
                 var entry = cardDB.cards[i % cardDB.cards.Length];
                 Card3D card = CreateCard(entry);
+                card.facing = CardFacing.FacePlayer;
+                card.faceTarget = playerTransform;
 
-                // Fan layout
-                float normalizedPos = (float)i / Mathf.Max(1, mockHandSize - 1) - 0.5f; // -0.5 to 0.5
+                float normalizedPos = (float)i / Mathf.Max(1, mockHandSize - 1) - 0.5f;
                 float angle = normalizedPos * handFanAngle;
                 float xOffset = normalizedPos * handCardSpacing * (mockHandSize - 1);
                 float yOffset = Mathf.Abs(normalizedPos) * handLiftY * 2f;
 
                 Vector3 cardPos = handAnchor.position + handAnchor.right * xOffset + handAnchor.up * yOffset;
-                Quaternion cardRot = handAnchor.rotation * Quaternion.Euler(0f, angle, 0f);
 
-                card.SetBasePose(cardPos, cardRot);
+                card.SetBasePose(cardPos, Quaternion.Euler(0f, angle, 0f));
                 card.PlayDrawAnimation(
-                    deckPosition != null ? deckPosition.position : cardPos + Vector3.up * 0.5f,
-                    cardRot,
+                    deckPosition != null ? deckPosition.position : cardPos + Vector3.up * 0.1f,
+                    Quaternion.Euler(0f, angle, 0f),
                     i * 0.15f);
                 handCards.Add(card);
             }
 
-            // Place some mock enemy cards
             for (int i = 0; i < mockFieldCards && i < enemyFieldSlots.Count; i++)
             {
                 var entry = cardDB.cards[(mockHandSize + i) % cardDB.cards.Length];
                 Card3D card = CreateCard(entry);
-                card.SetBasePose(enemyFieldSlots[i].GetCardPosition(), enemyFieldSlots[i].GetCardRotation());
+                card.facing = CardFacing.FaceUp;
+                card.SetSlotTransform(enemyFieldSlots[i].transform);
+                card.SetBasePose(enemyFieldSlots[i].GetCardPosition(), Quaternion.identity);
                 enemyFieldSlots[i].PlaceCard(card);
                 enemyFieldCards.Add(card);
+            }
+
+            Transform enemyAnchor = opponentHandAnchor != null ? opponentHandAnchor : opponentAnchor;
+            if (enemyAnchor != null)
+            {
+                for (int i = 0; i < mockHandSize; i++)
+                {
+                    var entry = cardDB.cards[i % cardDB.cards.Length];
+                    Card3D card = CreateCard(entry);
+                    card.facing = CardFacing.FaceEnemy;
+                    card.faceTarget = opponentTransform;
+
+                    float normalizedPos = (float)i / Mathf.Max(1, mockHandSize - 1) - 0.5f;
+                    float xOffset = normalizedPos * handCardSpacing * (mockHandSize - 1);
+                    float yOffset = Mathf.Abs(normalizedPos) * handLiftY * 2f;
+
+                    Vector3 cardPos = enemyAnchor.position + enemyAnchor.right * xOffset + enemyAnchor.up * yOffset;
+
+                    card.SetBasePose(cardPos, Quaternion.identity);
+                    card.PlayDrawAnimation(
+                        cardPos + Vector3.up * 0.1f,
+                        Quaternion.identity,
+                        i * 0.1f);
+                    enemyHandCards.Add(card);
+                }
             }
         }
 
         private Card3D CreateCard(MockCardDB.CardEntry entry)
         {
-            GameObject cardObj;
+            if (cardPrefabInstance == null) return null;
 
-            if (cardPrefab != null)
-            {
-                cardObj = Instantiate(cardPrefab);
-            }
-            else
-            {
-                cardObj = CreateDefaultCardVisual();
-            }
+            GameObject cardObj = Instantiate(cardPrefabInstance);
+            cardObj.name = "Card_" + entry.displayName;
 
             var card = cardObj.GetComponent<Card3D>();
             if (card == null) card = cardObj.AddComponent<Card3D>();
@@ -194,63 +238,9 @@ namespace FirstView
             card.ability = entry.ability;
             card.cost = entry.cost;
             card.rarity = entry.rarity;
-
-            cardObj.name = $"Card_{entry.displayName}";
-            cardObj.layer = LayerMask.NameToLayer("Default");
+            card.ShowFront(true);
 
             return card;
-        }
-
-        private GameObject CreateDefaultCardVisual()
-        {
-            // Card body: thin box
-            var obj = GameObject.CreatePrimitive(PrimitiveType.Cube);
-            obj.transform.localScale = new Vector3(0.5f, 0.005f, 0.7f);
-
-            // Card material
-            var renderer = obj.GetComponent<MeshRenderer>();
-            var mat = new Material(Shader.Find("Universal Render Pipeline/Lit"));
-            mat.SetColor("_BaseColor", new Color(0.12f, 0.1f, 0.08f));
-            renderer.material = mat;
-
-            // BoxCollider for interaction (Card3D sets it up in Awake)
-
-            // Create card face child (simple quad with text)
-            var faceObj = new GameObject("CardFace");
-            faceObj.transform.SetParent(obj.transform, false);
-            faceObj.transform.localPosition = new Vector3(0f, 0.5f, 0f); // On top face
-            faceObj.transform.localRotation = Quaternion.Euler(90f, 0f, 0f);
-            faceObj.transform.localScale = new Vector3(0.9f, 1.3f, 1f);
-
-            var faceRenderer = faceObj.AddComponent<MeshRenderer>();
-            var faceMat = new Material(Shader.Find("Universal Render Pipeline/Lit"));
-            faceMat.SetColor("_BaseColor", new Color(0.95f, 0.92f, 0.85f));
-            faceRenderer.material = faceMat;
-            faceObj.AddComponent<MeshFilter>().mesh = CreateQuadMesh();
-
-            return obj;
-        }
-
-        private static Mesh CreateQuadMesh()
-        {
-            var mesh = new Mesh();
-            mesh.vertices = new Vector3[]
-            {
-                new Vector3(-0.5f, -0.5f, 0f),
-                new Vector3(0.5f, -0.5f, 0f),
-                new Vector3(-0.5f, 0.5f, 0f),
-                new Vector3(0.5f, 0.5f, 0f)
-            };
-            mesh.triangles = new int[] { 0, 2, 1, 2, 3, 1 };
-            mesh.uv = new Vector2[]
-            {
-                new Vector2(0f, 0f),
-                new Vector2(1f, 0f),
-                new Vector2(0f, 1f),
-                new Vector2(1f, 1f)
-            };
-            mesh.RecalculateNormals();
-            return mesh;
         }
 
         private void WireInteraction()
@@ -258,31 +248,81 @@ namespace FirstView
             if (interactor == null) return;
 
             interactor.OnCardClicked += HandleCardClicked;
-            interactor.OnSlotClicked += HandleSlotClicked;
+            interactor.OnCardPlaced += HandleCardPlaced;
+            interactor.OnCardDeselected += HandleCardDeselected;
             interactor.OnEnvironmentClicked += HandleEnvironmentClicked;
         }
 
         private void HandleCardClicked(Card3D card)
         {
-            Debug.Log($"[FirstView] Card clicked: {card.cardName}");
-            // For prototype: just focus to the relevant area
             if (handCards.Contains(card))
-                cameraRig.FocusTo("Hand");
+            {
+                interactor.SelectCard(card);
+                pendingSelectedCard = card;
+                cameraRig.FocusTo("MyField");
+                HighlightPlayerSlots(true);
+            }
             else if (enemyFieldCards.Contains(card))
+            {
                 cameraRig.FocusTo("EnemyField");
+            }
         }
 
-        private void HandleSlotClicked(CardSlot slot)
+        private void HandleCardPlaced(Card3D card, CardSlot slot)
         {
-            Debug.Log($"[FirstView] Slot clicked: {slot.slotId}");
-            if (slot.owner == SlotOwner.Player)
-                cameraRig.FocusTo("MyField");
+            if (!handCards.Contains(card)) return;
+            if (!myFieldSlots.Contains(slot)) return;
+            if (slot.isOccupied) return;
+
+            handCards.Remove(card);
+            card.facing = CardFacing.FaceUp;
+            card.SetSlotTransform(slot.transform);
+            slot.PlaceCard(card);
+            RearrangeHand();
+            HighlightPlayerSlots(false);
+            pendingSelectedCard = null;
+
+            Debug.Log($"[FirstView] Placed {card.cardName} into {slot.slotId}");
+        }
+
+        private void HandleCardDeselected(Card3D _)
+        {
+            HighlightPlayerSlots(false);
+            pendingSelectedCard = null;
         }
 
         private void HandleEnvironmentClicked(string focusId)
         {
-            Debug.Log($"[FirstView] Environment clicked -> focus: {focusId}");
             cameraRig.FocusTo(focusId);
+        }
+
+        private void HighlightPlayerSlots(bool on)
+        {
+            foreach (var slot in myFieldSlots)
+            {
+                if (!slot.isOccupied)
+                    slot.SetHighlight(on);
+            }
+        }
+
+        private void RearrangeHand()
+        {
+            int count = handCards.Count;
+            if (count == 0) return;
+
+            for (int i = 0; i < count; i++)
+            {
+                float normalizedPos = count == 1 ? 0f : (float)i / (count - 1) - 0.5f;
+                float angle = normalizedPos * handFanAngle;
+                float xOffset = normalizedPos * handCardSpacing * (count - 1);
+                float yOffset = Mathf.Abs(normalizedPos) * handLiftY * 2f;
+
+                Vector3 cardPos = handAnchor.position + handAnchor.right * xOffset + handAnchor.up * yOffset;
+                Quaternion cardRot = Quaternion.Euler(0f, angle, 0f);
+
+                handCards[i].PlayPlaceAnimation(cardPos, cardRot);
+                handCards[i].SetBasePose(cardPos, cardRot);
+            }
         }
 
         private void OnDestroy()
@@ -290,7 +330,8 @@ namespace FirstView
             if (interactor != null)
             {
                 interactor.OnCardClicked -= HandleCardClicked;
-                interactor.OnSlotClicked -= HandleSlotClicked;
+                interactor.OnCardPlaced -= HandleCardPlaced;
+                interactor.OnCardDeselected -= HandleCardDeselected;
                 interactor.OnEnvironmentClicked -= HandleEnvironmentClicked;
             }
         }

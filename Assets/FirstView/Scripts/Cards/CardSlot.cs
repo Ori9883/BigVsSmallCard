@@ -26,7 +26,7 @@ namespace FirstView
 
         private void Awake()
         {
-            if (slotRenderer == null) slotRenderer = GetComponent<MeshRenderer>();
+            if (slotRenderer == null) slotRenderer = GetComponentInChildren<MeshRenderer>();
         }
 
         public void SetHighlight(bool active)
