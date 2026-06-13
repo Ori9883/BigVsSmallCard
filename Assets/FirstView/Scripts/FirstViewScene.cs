@@ -1,12 +1,10 @@
 using UnityEngine;
 using System.Collections.Generic;
 
+using FirstView.Gameplay;
+
 namespace FirstView
 {
-    /// <summary>
-    /// Main scene orchestrator. Sets up the 3D first-person card table
-    /// with mock data, manages card hand layout, and wires interactions.
-    /// </summary>
     public class FirstViewScene : MonoBehaviour
     {
         [Header("Camera")]
@@ -41,16 +39,12 @@ namespace FirstView
         [SerializeField] private float fieldSlotSpacing = 0.08f;
         [SerializeField] private int fieldSlotsPerSide = 1;
 
-        [Header("Mock")]
-        [SerializeField] private int mockHandSize = 15;
-        [SerializeField] private int mockFieldCards = 0;
-
         private readonly List<Card3D> handCards = new List<Card3D>();
         private readonly List<Card3D> enemyHandCards = new List<Card3D>();
         private readonly List<Card3D> enemyFieldCards = new List<Card3D>();
         private readonly List<CardSlot> myFieldSlots = new List<CardSlot>();
         private readonly List<CardSlot> enemyFieldSlots = new List<CardSlot>();
-        private MockCardDB cardDB;
+        private GameSession session;
         private Card3D pendingSelectedCard;
         private GameObject cardPrefabInstance;
         private Transform playerTransform;
@@ -58,7 +52,9 @@ namespace FirstView
 
         private void Start()
         {
-            cardDB = MockCardDB.CreateDefault();
+            session = gameObject.AddComponent<GameSession>();
+            session.Deal();
+
             cardPrefabInstance = Resources.Load<GameObject>(cardPrefabResourcePath);
             if (cardPrefabInstance == null)
                 Debug.LogError("[FirstView] Card prefab not found at Resources/" + cardPrefabResourcePath);
@@ -67,7 +63,7 @@ namespace FirstView
             opponentTransform = EnsureEntity("Opponent", new Vector3(0f, 1.2f, 1.5f));
 
             CreateFieldSlots();
-            DealMockCards();
+            DealCards();
             WireInteraction();
             cameraRig.Initialize("Idle");
         }
@@ -158,20 +154,21 @@ namespace FirstView
             return obj;
         }
 
-        private void DealMockCards()
+        private void DealCards()
         {
-            if (cardDB == null || cardDB.cards == null || cardDB.cards.Length == 0) return;
+            if (!session.IsDealt) return;
 
-            for (int i = 0; i < mockHandSize; i++)
+            int playerCount = session.PlayerHand.Count;
+            for (int i = 0; i < playerCount; i++)
             {
-                var entry = cardDB.cards[i % cardDB.cards.Length];
-                Card3D card = CreateCard(entry);
+                GameCard gc = session.PlayerHand[i];
+                Card3D card = CreateCard(gc);
                 card.facing = CardFacing.FacePlayer;
                 card.faceTarget = playerTransform;
 
-                float normalizedPos = (float)i / Mathf.Max(1, mockHandSize - 1) - 0.5f;
+                float normalizedPos = (float)i / Mathf.Max(1, playerCount - 1) - 0.5f;
                 float angle = normalizedPos * handFanAngle;
-                float xOffset = normalizedPos * handCardSpacing * (mockHandSize - 1);
+                float xOffset = normalizedPos * handCardSpacing * (playerCount - 1);
                 float yOffset = Mathf.Abs(normalizedPos) * handLiftY * 2f;
 
                 Vector3 cardPos = handAnchor.position + handAnchor.right * xOffset + handAnchor.up * yOffset;
@@ -180,33 +177,24 @@ namespace FirstView
                 card.PlayDrawAnimation(
                     deckPosition != null ? deckPosition.position : cardPos + Vector3.up * 0.1f,
                     Quaternion.Euler(0f, angle, 0f),
-                    i * 0.15f);
+                    i * 0.1f);
                 handCards.Add(card);
-            }
-
-            for (int i = 0; i < mockFieldCards && i < enemyFieldSlots.Count; i++)
-            {
-                var entry = cardDB.cards[(mockHandSize + i) % cardDB.cards.Length];
-                Card3D card = CreateCard(entry);
-                card.facing = CardFacing.FaceUp;
-                card.SetSlotTransform(enemyFieldSlots[i].transform);
-                card.SetBasePose(enemyFieldSlots[i].GetCardPosition(), Quaternion.identity);
-                enemyFieldSlots[i].PlaceCard(card);
-                enemyFieldCards.Add(card);
             }
 
             Transform enemyAnchor = opponentHandAnchor != null ? opponentHandAnchor : opponentAnchor;
             if (enemyAnchor != null)
             {
-                for (int i = 0; i < mockHandSize; i++)
+                int enemyCount = session.EnemyHand.Count;
+                for (int i = 0; i < enemyCount; i++)
                 {
-                    var entry = cardDB.cards[i % cardDB.cards.Length];
-                    Card3D card = CreateCard(entry);
+                    GameCard gc = session.EnemyHand[i];
+                    Card3D card = CreateCard(gc);
                     card.facing = CardFacing.FaceEnemy;
                     card.faceTarget = opponentTransform;
+                    card.ShowFront(false);
 
-                    float normalizedPos = (float)i / Mathf.Max(1, mockHandSize - 1) - 0.5f;
-                    float xOffset = normalizedPos * handCardSpacing * (mockHandSize - 1);
+                    float normalizedPos = (float)i / Mathf.Max(1, enemyCount - 1) - 0.5f;
+                    float xOffset = normalizedPos * handCardSpacing * (enemyCount - 1);
                     float yOffset = Mathf.Abs(normalizedPos) * handLiftY * 2f;
 
                     Vector3 cardPos = enemyAnchor.position + enemyAnchor.right * xOffset + enemyAnchor.up * yOffset;
@@ -221,24 +209,34 @@ namespace FirstView
             }
         }
 
-        private Card3D CreateCard(MockCardDB.CardEntry entry)
+        private static readonly Dictionary<CardColor, string> ColorNames = new Dictionary<CardColor, string>
+        {
+            { CardColor.Green, "绿" },
+            { CardColor.Blue, "蓝" },
+            { CardColor.Red, "红" }
+        };
+
+        private Card3D CreateCard(GameCard gc)
         {
             if (cardPrefabInstance == null) return null;
 
             GameObject cardObj = Instantiate(cardPrefabInstance);
-            cardObj.name = "Card_" + entry.displayName;
+            cardObj.name = "Card_" + gc.ToString();
 
             var card = cardObj.GetComponent<Card3D>();
             if (card == null) card = cardObj.AddComponent<Card3D>();
 
-            card.cardId = entry.id;
-            card.cardName = entry.displayName;
-            card.attack = entry.attack;
-            card.health = entry.health;
-            card.ability = entry.ability;
-            card.cost = entry.cost;
-            card.rarity = entry.rarity;
-            card.ShowFront(true);
+            card.cardId = gc.ToString();
+            card.cardName = gc.ToString();
+
+            string cn = ColorNames[gc.Color];
+            Sprite front = Resources.Load<Sprite>($"Cards/{cn}{gc.Number}");
+            Sprite back = Resources.Load<Sprite>($"Cards/{cn}背景");
+
+            if (front != null) card.SetFrontSprite(front);
+            if (back != null) card.SetBackSprite(back);
+
+            card.ShowBothSides();
 
             return card;
         }
