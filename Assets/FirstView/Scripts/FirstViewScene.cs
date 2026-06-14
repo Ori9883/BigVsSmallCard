@@ -36,6 +36,9 @@ namespace FirstView
         [SerializeField] private string startScreenPrefabResourcePath = "StartScreenCanvas";
         [SerializeField] private GameObject startScreenRoot;
         [SerializeField] private Button startButton;
+        [SerializeField] private Toggle normalAIToggle;
+        [SerializeField] private Toggle strongAIToggle;
+        [SerializeField] private Toggle godAIToggle;
 
         [Header("Layout")]
         [SerializeField] private float handCardSpacing = 0.068f;
@@ -66,6 +69,7 @@ namespace FirstView
         private bool gameStarted;
         private bool startupReferencesValid;
         private bool startScreenInstantiated;
+        private EnemyAIDifficulty selectedAIDifficulty = EnemyAIDifficulty.Normal;
 
         private void Start()
         {
@@ -127,6 +131,26 @@ namespace FirstView
                     }
                 }
             }
+
+            ResolveAIDifficultyToggles();
+        }
+
+        private void ResolveAIDifficultyToggles()
+        {
+            if (startScreenRoot == null) return;
+
+            if (normalAIToggle == null)
+                normalAIToggle = FindToggleRecursive(startScreenRoot.transform, "AIDifficultyOption_普通");
+            if (strongAIToggle == null)
+                strongAIToggle = FindToggleRecursive(startScreenRoot.transform, "AIDifficultyOption_强力");
+            if (godAIToggle == null)
+                godAIToggle = FindToggleRecursive(startScreenRoot.transform, "AIDifficultyOption_神级");
+        }
+
+        private static Toggle FindToggleRecursive(Transform parent, string childName)
+        {
+            Transform child = FindChildRecursive(parent, childName);
+            return child != null ? child.GetComponent<Toggle>() : null;
         }
 
         private bool IsStartScreenExpected()
@@ -172,6 +196,11 @@ namespace FirstView
             }
 
             gameStarted = true;
+            selectedAIDifficulty = ReadSelectedAIDifficulty();
+
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+            Debug.Log($"[FirstView] Selected AI difficulty: {selectedAIDifficulty}");
+#endif
 
             if (startButton != null)
             {
@@ -189,6 +218,15 @@ namespace FirstView
             WireInteraction();
             cameraRig.Initialize("Hand");
             session.BeginGame();
+        }
+
+        private EnemyAIDifficulty ReadSelectedAIDifficulty()
+        {
+            ResolveAIDifficultyToggles();
+
+            if (godAIToggle != null && godAIToggle.isOn) return EnemyAIDifficulty.God;
+            if (strongAIToggle != null && strongAIToggle.isOn) return EnemyAIDifficulty.Strong;
+            return EnemyAIDifficulty.Normal;
         }
 
         private bool ValidateStartupReferences()
@@ -231,6 +269,11 @@ namespace FirstView
             {
                 Debug.LogError("[FirstView] Start screen root must include a Canvas component or be parented under one.");
                 valid = false;
+            }
+
+            if (startScreenRoot != null && normalAIToggle == null && strongAIToggle == null && godAIToggle == null)
+            {
+                Debug.LogWarning("[FirstView] AI difficulty toggles were not found; defaulting to Normal AI.");
             }
 
             if (startScreenInstantiated && startScreenRoot != null && startScreenRoot.scene != gameObject.scene)
@@ -457,7 +500,8 @@ namespace FirstView
             if (session.PlayerIsFirst && session.Phase == RoundPhase.FirstTurn) return;
             if (!session.PlayerIsFirst && session.Phase == RoundPhase.SecondTurn) return;
 
-            int aiPick = FirstView.Gameplay.EnemyAI.PickCardIndex(session.EnemyHand);
+            EnemyAIDecisionContext aiContext = BuildEnemyAIContext();
+            int aiPick = FirstView.Gameplay.EnemyAI.PickCardIndex(session.EnemyHand, aiContext);
             if (aiPick < 0) return;
 
             Card3D card = enemyHandCards[aiPick];
@@ -469,6 +513,39 @@ namespace FirstView
 
             session.SetPlayedIndex(false, aiPick);
             session.OnCardPlayed(false);
+        }
+
+        private EnemyAIDecisionContext BuildEnemyAIContext()
+        {
+            List<PublicCardInfo> playerPublicCards = new List<PublicCardInfo>();
+            if (session.PlayerHand != null)
+            {
+                for (int i = 0; i < session.PlayerHand.Count; i++)
+                {
+                    playerPublicCards.Add(new PublicCardInfo(session.PlayerHand[i].Color));
+                }
+            }
+
+            bool hasPlayerPlayedPublicCard = session.PlayerIsFirst
+                && session.PlayerPlayedIndex >= 0
+                && session.PlayerHand != null
+                && session.PlayerPlayedIndex < session.PlayerHand.Count;
+
+            PublicCardInfo playerPlayedPublicCard = hasPlayerPlayedPublicCard
+                ? new PublicCardInfo(session.PlayerHand[session.PlayerPlayedIndex].Color)
+                : default;
+
+            return new EnemyAIDecisionContext(
+                selectedAIDifficulty,
+                playerPublicCards,
+                hasPlayerPlayedPublicCard,
+                playerPlayedPublicCard,
+                session.SettledHistory,
+                session.RemovedCard,
+                session.CurrentRound,
+                session.PlayerScore,
+                session.EnemyScore,
+                session.PlayerIsFirst);
         }
 
         private void HandleBothCardsPlayed()

@@ -3,10 +3,29 @@ using UnityEngine;
 
 namespace FirstView.Gameplay
 {
+    public readonly struct SettledRoundRecord
+    {
+        public readonly int Round;
+        public readonly GameCard PlayerCard;
+        public readonly GameCard EnemyCard;
+        public readonly int Result;
+        public readonly int Score;
+
+        public SettledRoundRecord(int round, GameCard playerCard, GameCard enemyCard, int result, int score)
+        {
+            Round = round;
+            PlayerCard = playerCard;
+            EnemyCard = enemyCard;
+            Result = result;
+            Score = score;
+        }
+    }
+
     public class GameSession : MonoBehaviour
     {
         public List<GameCard> PlayerHand { get; private set; }
         public List<GameCard> EnemyHand { get; private set; }
+        public List<SettledRoundRecord> SettledHistory { get; private set; }
         public GameCard RemovedCard { get; private set; }
         public int PlayerScore { get; private set; }
         public int EnemyScore { get; private set; }
@@ -35,6 +54,7 @@ namespace FirstView.Gameplay
 
             PlayerHand = ph;
             EnemyHand = eh;
+            SettledHistory = new List<SettledRoundRecord>(ScoreSystem.TotalRounds);
             RemovedCard = removed;
 
             PlayerScore = 0;
@@ -101,8 +121,10 @@ namespace FirstView.Gameplay
         {
             Phase = RoundPhase.Settlement;
 
-            int pNum = PlayerHand[PlayerPlayedIndex].Number;
-            int eNum = EnemyHand[EnemyPlayedIndex].Number;
+            GameCard playerCard = PlayerHand[PlayerPlayedIndex];
+            GameCard enemyCard = EnemyHand[EnemyPlayedIndex];
+            int pNum = playerCard.Number;
+            int eNum = enemyCard.Number;
             int result = ScoreSystem.Compare(pNum, eNum);
             int score = ScoreSystem.GetRoundScore(CurrentRound - 1);
 
@@ -123,6 +145,8 @@ namespace FirstView.Gameplay
             }
 
             Debug.Log($"[Settlement] Round {CurrentRound}: P({pNum}) vs E({eNum}) -> {winner} (+{score}) | Total P={PlayerScore} E={EnemyScore}");
+
+            SettledHistory.Add(new SettledRoundRecord(CurrentRound, playerCard, enemyCard, result, score));
 
             PlayerHand.RemoveAt(PlayerPlayedIndex);
             EnemyHand.RemoveAt(EnemyPlayedIndex);
