@@ -44,6 +44,10 @@ namespace FirstView
         [SerializeField] private float fieldSlotSpacing = 0.08f;
         [SerializeField] private int fieldSlotsPerSide = 1;
 
+        [Header("Score Displays")]
+        [SerializeField] private ScoreCounterDisplay playerScoreDisplay;
+        [SerializeField] private ScoreCounterDisplay enemyScoreDisplay;
+
         [Header("Discard Pile")]
         [SerializeField] private DiscardPile discardPile;
 
@@ -423,6 +427,9 @@ namespace FirstView
             session.OnTurnStart += HandleTurnStart;
             session.OnBothCardsPlayed += HandleBothCardsPlayed;
             session.OnSettled += HandleSettled;
+
+            if (playerScoreDisplay != null) playerScoreDisplay.SetValueImmediate(0);
+            if (enemyScoreDisplay != null) enemyScoreDisplay.SetValueImmediate(0);
         }
 
         private void HandleRoundStart()
@@ -491,6 +498,11 @@ namespace FirstView
             }
             playerFieldCard = null;
             enemyFieldCard = null;
+
+            if (playerScoreDisplay != null)
+                playerScoreDisplay.AnimateTo(session.PlayerScore);
+            if (enemyScoreDisplay != null)
+                enemyScoreDisplay.AnimateTo(session.EnemyScore);
 
             cameraRig.FocusTo("Hand");
         }
