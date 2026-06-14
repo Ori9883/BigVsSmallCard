@@ -29,6 +29,9 @@ namespace FirstView
         [SerializeField] private float animSmoothTime = 0.12f;
         [SerializeField] private float globalScale = 0.1f;
 
+        [Header("Collider")]
+        [SerializeField] private Vector3 cardColliderSize = new Vector3(0.62f, 1f, 0.05f);
+
         public CardFacing facing = CardFacing.FacePlayer;
         public Transform faceTarget;
 
@@ -52,6 +55,15 @@ namespace FirstView
             ApplySprites();
             if (frontRoot != null) frontRoot.SetActive(true);
             if (backRoot != null) backRoot.SetActive(true);
+            EnsureCardCollider();
+        }
+
+        private void EnsureCardCollider()
+        {
+            if (GetComponent<Collider>() != null) return;
+            var col = gameObject.AddComponent<BoxCollider>();
+            col.size = cardColliderSize;
+            col.isTrigger = true;
         }
 
         private void LateUpdate()
@@ -392,6 +404,29 @@ namespace FirstView
         }
 
         #endregion
+
+#if UNITY_EDITOR
+        private void OnDrawGizmos()
+        {
+            var col = GetComponent<BoxCollider>();
+            if (col == null) return;
+
+            bool inPile = owningPile != null;
+            Gizmos.color = inPile
+                ? new Color(0.2f, 1f, 0.4f, 0.25f)
+                : new Color(0.9f, 0.9f, 0.2f, 0.15f);
+            Gizmos.DrawCube(
+                transform.TransformPoint(col.center),
+                Vector3.Scale(col.size, transform.lossyScale));
+
+            Gizmos.color = inPile
+                ? new Color(0.2f, 1f, 0.4f, 0.8f)
+                : new Color(0.9f, 0.9f, 0.2f, 0.5f);
+            Gizmos.DrawWireCube(
+                transform.TransformPoint(col.center),
+                Vector3.Scale(col.size, transform.lossyScale));
+        }
+#endif
     }
 
     public enum CardFacing

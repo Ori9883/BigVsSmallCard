@@ -407,6 +407,8 @@ namespace FirstView
             }
             playerFieldCard = null;
             enemyFieldCard = null;
+
+            cameraRig.FocusTo("Hand");
         }
 
         private void ClearFieldCards()
@@ -448,6 +450,7 @@ namespace FirstView
         private void HandleDiscardPileClicked(DiscardPile pile)
         {
             pile.ToggleExpand();
+            cameraRig.FocusTo(pile.IsExpanded ? "DiscardPile" : "Hand");
         }
 
         private void HandleCardPlaced(Card3D card, CardSlot slot)
