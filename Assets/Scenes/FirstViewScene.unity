@@ -788,9 +788,21 @@ PrefabInstance:
     serializedVersion: 3
     m_TransformParent: {fileID: 483037602}
     m_Modifications:
+    - target: {fileID: 92576002195783114, guid: 053e7bfcbbff25c40b8f578ede710635, type: 3}
+      propertyPath: m_ProbeAnchor
+      value: 
+      objectReference: {fileID: 330585546}
     - target: {fileID: 2701694822681130782, guid: 053e7bfcbbff25c40b8f578ede710635, type: 3}
       propertyPath: m_Name
       value: EnermyCounter
+      objectReference: {fileID: 0}
+    - target: {fileID: 4410288089297858331, guid: 053e7bfcbbff25c40b8f578ede710635, type: 3}
+      propertyPath: m_DynamicPixelsPerUnit
+      value: 5000
+      objectReference: {fileID: 0}
+    - target: {fileID: 5947466348351734535, guid: 053e7bfcbbff25c40b8f578ede710635, type: 3}
+      propertyPath: m_FontData.m_BestFit
+      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: 7314189829817356023, guid: 053e7bfcbbff25c40b8f578ede710635, type: 3}
       propertyPath: m_LocalPosition.x
@@ -832,16 +844,47 @@ PrefabInstance:
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
       objectReference: {fileID: 0}
+    - target: {fileID: 7327720421692289347, guid: 053e7bfcbbff25c40b8f578ede710635, type: 3}
+      propertyPath: m_Camera
+      value: 
+      objectReference: {fileID: 330585545}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
-    m_AddedComponents: []
+    m_AddedComponents:
+    - targetCorrespondingSourceObject: {fileID: 2701694822681130782, guid: 053e7bfcbbff25c40b8f578ede710635, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 370961245}
   m_SourcePrefab: {fileID: 100100000, guid: 053e7bfcbbff25c40b8f578ede710635, type: 3}
 --- !u!4 &348164458 stripped
 Transform:
   m_CorrespondingSourceObject: {fileID: 7314189829817356023, guid: 053e7bfcbbff25c40b8f578ede710635, type: 3}
   m_PrefabInstance: {fileID: 348164457}
   m_PrefabAsset: {fileID: 0}
+--- !u!1 &370961242 stripped
+GameObject:
+  m_CorrespondingSourceObject: {fileID: 2701694822681130782, guid: 053e7bfcbbff25c40b8f578ede710635, type: 3}
+  m_PrefabInstance: {fileID: 348164457}
+  m_PrefabAsset: {fileID: 0}
+--- !u!114 &370961245
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 370961242}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4ee89937c95c6d34eb3522d440f5a004, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::FirstView.Gameplay.ScoreCounterDisplay
+  label: {fileID: 0}
+  countDuration: 0.8
+  countEase: 6
+  punchScale: 0.3
+  punchDuration: 0.5
+  punchVibrato: 6
+  punchElasticity: 1
 --- !u!1 &373614244
 GameObject:
   m_ObjectHideFlags: 0
@@ -2808,6 +2851,8 @@ MonoBehaviour:
   handLiftY: 0.001
   fieldSlotSpacing: 0.08
   fieldSlotsPerSide: 1
+  playerScoreDisplay: {fileID: 1747605026}
+  enemyScoreDisplay: {fileID: 370961245}
   discardPile: {fileID: 1460973705}
 --- !u!4 &1399250931
 Transform:
@@ -3347,11 +3392,35 @@ MeshFilter:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1701501593}
   m_Mesh: {fileID: 10202, guid: 0000000000000000e000000000000000, type: 0}
+--- !u!1 &1747605022 stripped
+GameObject:
+  m_CorrespondingSourceObject: {fileID: 2701694822681130782, guid: 053e7bfcbbff25c40b8f578ede710635, type: 3}
+  m_PrefabInstance: {fileID: 4928219763817401687}
+  m_PrefabAsset: {fileID: 0}
 --- !u!4 &1747605025 stripped
 Transform:
   m_CorrespondingSourceObject: {fileID: 7314189829817356023, guid: 053e7bfcbbff25c40b8f578ede710635, type: 3}
   m_PrefabInstance: {fileID: 4928219763817401687}
   m_PrefabAsset: {fileID: 0}
+--- !u!114 &1747605026
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1747605022}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4ee89937c95c6d34eb3522d440f5a004, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::FirstView.Gameplay.ScoreCounterDisplay
+  label: {fileID: 0}
+  countDuration: 0.8
+  countEase: 6
+  punchScale: 0.3
+  punchDuration: 0.5
+  punchVibrato: 6
+  punchElasticity: 1
 --- !u!1 &1799820227
 GameObject:
   m_ObjectHideFlags: 0
@@ -3935,9 +4004,17 @@ PrefabInstance:
     serializedVersion: 3
     m_TransformParent: {fileID: 483037602}
     m_Modifications:
+    - target: {fileID: 92576002195783114, guid: 053e7bfcbbff25c40b8f578ede710635, type: 3}
+      propertyPath: m_ProbeAnchor
+      value: 
+      objectReference: {fileID: 330585546}
     - target: {fileID: 2701694822681130782, guid: 053e7bfcbbff25c40b8f578ede710635, type: 3}
       propertyPath: m_Name
       value: PlayerCounter
+      objectReference: {fileID: 0}
+    - target: {fileID: 4410288089297858331, guid: 053e7bfcbbff25c40b8f578ede710635, type: 3}
+      propertyPath: m_DynamicPixelsPerUnit
+      value: 5000
       objectReference: {fileID: 0}
     - target: {fileID: 7314189829817356023, guid: 053e7bfcbbff25c40b8f578ede710635, type: 3}
       propertyPath: m_LocalPosition.x
@@ -3979,10 +4056,17 @@ PrefabInstance:
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
       objectReference: {fileID: 0}
+    - target: {fileID: 7327720421692289347, guid: 053e7bfcbbff25c40b8f578ede710635, type: 3}
+      propertyPath: m_Camera
+      value: 
+      objectReference: {fileID: 330585545}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
-    m_AddedComponents: []
+    m_AddedComponents:
+    - targetCorrespondingSourceObject: {fileID: 2701694822681130782, guid: 053e7bfcbbff25c40b8f578ede710635, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 1747605026}
   m_SourcePrefab: {fileID: 100100000, guid: 053e7bfcbbff25c40b8f578ede710635, type: 3}
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
