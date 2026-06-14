@@ -1,6 +1,7 @@
 using UnityEngine;
 using System.Collections.Generic;
 using FirstView.Gameplay;
+using UnityEngine.UI;
 
 namespace FirstView
 {
@@ -31,6 +32,10 @@ namespace FirstView
         [Header("Interaction")]
         [SerializeField] private TableInteractor interactor;
 
+        [Header("Start Screen")]
+        [SerializeField] private GameObject startScreenRoot;
+        [SerializeField] private Button startButton;
+
         [Header("Layout")]
         [SerializeField] private float handCardSpacing = 0.068f;
         [SerializeField] private float handFanAngle = 6f;
@@ -53,6 +58,8 @@ namespace FirstView
         private GameObject cardPrefabInstance;
         private Transform playerTransform;
         private Transform opponentTransform;
+        private bool gameStarted;
+        private bool startupReferencesValid;
 
         private void Start()
         {
@@ -65,11 +72,95 @@ namespace FirstView
             playerTransform = EnsureEntity("Player", new Vector3(0f, 1.2f, -0.5f));
             opponentTransform = EnsureEntity("Opponent", new Vector3(0f, 1.2f, 1.5f));
 
+            startupReferencesValid = ValidateStartupReferences();
+            ShowStartScreen();
+            if (startButton != null)
+            {
+                startButton.onClick.AddListener(StartGameFromStartScreen);
+                startButton.interactable = startupReferencesValid;
+            }
+            else
+            {
+                Debug.LogWarning("[FirstView] Start button is not assigned; starting game immediately.");
+                StartGameFromStartScreen();
+            }
+        }
+
+        private void ShowStartScreen()
+        {
+            if (startScreenRoot != null)
+            {
+                startScreenRoot.SetActive(true);
+            }
+        }
+
+        private void StartGameFromStartScreen()
+        {
+            if (gameStarted) return;
+
+            if (!startupReferencesValid && !ValidateStartupReferences())
+            {
+                if (startButton != null)
+                {
+                    startButton.interactable = false;
+                }
+                return;
+            }
+
+            gameStarted = true;
+
+            if (startButton != null)
+            {
+                startButton.onClick.RemoveListener(StartGameFromStartScreen);
+                startButton.interactable = false;
+            }
+
+            if (startScreenRoot != null)
+            {
+                startScreenRoot.SetActive(false);
+            }
+
             CreateFieldSlots();
             WireSession();
             WireInteraction();
             cameraRig.Initialize("Hand");
             session.BeginGame();
+        }
+
+        private bool ValidateStartupReferences()
+        {
+            bool valid = true;
+
+            valid &= ValidateReference(session, nameof(session));
+            valid &= ValidateReference(cardPrefabInstance, nameof(cardPrefabInstance));
+            valid &= ValidateReference(cameraRig, nameof(cameraRig));
+            valid &= ValidateReference(tableSurface, nameof(tableSurface));
+            valid &= ValidateReference(handAnchor, nameof(handAnchor));
+            valid &= ValidateReference(myFieldAnchor, nameof(myFieldAnchor));
+            valid &= ValidateReference(enemyFieldAnchor, nameof(enemyFieldAnchor));
+            valid &= ValidateReference(interactor, nameof(interactor));
+
+            if (startScreenRoot == null && startButton != null)
+            {
+                Debug.LogError("[FirstView] Start screen root is not assigned while start button is assigned.");
+                valid = false;
+            }
+
+            if (startScreenRoot != null && startButton == null)
+            {
+                Debug.LogWarning("[FirstView] Start screen root is assigned but start button is missing; game will auto-start.");
+            }
+
+            startupReferencesValid = valid;
+            return valid;
+        }
+
+        private static bool ValidateReference(Object reference, string fieldName)
+        {
+            if (reference != null) return true;
+
+            Debug.LogError($"[FirstView] Required startup reference is missing: {fieldName}");
+            return false;
         }
 
         private static Transform EnsureEntity(string name, Vector3 pos)
@@ -421,6 +512,11 @@ namespace FirstView
 
         private void OnDestroy()
         {
+            if (startButton != null)
+            {
+                startButton.onClick.RemoveListener(StartGameFromStartScreen);
+            }
+
             if (interactor != null)
             {
                 interactor.OnCardClicked -= HandleCardClicked;
