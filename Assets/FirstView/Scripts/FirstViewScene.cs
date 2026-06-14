@@ -33,6 +33,7 @@ namespace FirstView
         [SerializeField] private TableInteractor interactor;
 
         [Header("Start Screen")]
+        [SerializeField] private string startScreenPrefabResourcePath = "StartScreenCanvas";
         [SerializeField] private GameObject startScreenRoot;
         [SerializeField] private Button startButton;
 
@@ -60,6 +61,7 @@ namespace FirstView
         private Transform opponentTransform;
         private bool gameStarted;
         private bool startupReferencesValid;
+        private bool startScreenInstantiated;
 
         private void Start()
         {
@@ -72,18 +74,76 @@ namespace FirstView
             playerTransform = EnsureEntity("Player", new Vector3(0f, 1.2f, -0.5f));
             opponentTransform = EnsureEntity("Opponent", new Vector3(0f, 1.2f, 1.5f));
 
+            EnsureStartScreen();
             startupReferencesValid = ValidateStartupReferences();
             ShowStartScreen();
             if (startButton != null)
             {
+                startButton.onClick.RemoveListener(StartGameFromStartScreen);
                 startButton.onClick.AddListener(StartGameFromStartScreen);
                 startButton.interactable = startupReferencesValid;
+            }
+            else if (IsStartScreenExpected())
+            {
+                Debug.LogError("[FirstView] Start screen is expected but no start button is available; game will not auto-start.");
             }
             else
             {
                 Debug.LogWarning("[FirstView] Start button is not assigned; starting game immediately.");
                 StartGameFromStartScreen();
             }
+        }
+
+        private void EnsureStartScreen()
+        {
+            if (startScreenRoot == null && !string.IsNullOrWhiteSpace(startScreenPrefabResourcePath))
+            {
+                GameObject startScreenPrefab = Resources.Load<GameObject>(startScreenPrefabResourcePath);
+                if (startScreenPrefab == null)
+                {
+                    Debug.LogError("[FirstView] Start screen prefab not found at Resources/" + startScreenPrefabResourcePath);
+                }
+                else
+                {
+                    startScreenRoot = Instantiate(startScreenPrefab);
+                    startScreenRoot.name = startScreenPrefab.name;
+                    startScreenInstantiated = true;
+                }
+            }
+
+            if (startButton == null && startScreenRoot != null)
+            {
+                Transform startButtonTransform = FindChildRecursive(startScreenRoot.transform, "StartGameButton");
+                if (startButtonTransform != null)
+                {
+                    startButton = startButtonTransform.GetComponent<Button>();
+                    if (startButton == null)
+                    {
+                        Debug.LogError("[FirstView] StartGameButton was found but it has no Button component.");
+                    }
+                }
+            }
+        }
+
+        private bool IsStartScreenExpected()
+        {
+            return !string.IsNullOrWhiteSpace(startScreenPrefabResourcePath) || startScreenRoot != null;
+        }
+
+        private static Transform FindChildRecursive(Transform parent, string childName)
+        {
+            if (parent == null) return null;
+
+            for (int i = 0; i < parent.childCount; i++)
+            {
+                Transform child = parent.GetChild(i);
+                if (child.name == childName) return child;
+
+                Transform match = FindChildRecursive(child, childName);
+                if (match != null) return match;
+            }
+
+            return null;
         }
 
         private void ShowStartScreen()
@@ -146,9 +206,33 @@ namespace FirstView
                 valid = false;
             }
 
-            if (startScreenRoot != null && startButton == null)
+            if (startScreenRoot == null && IsStartScreenExpected())
+            {
+                Debug.LogError("[FirstView] Start screen root is missing and prefab loading failed.");
+                valid = false;
+            }
+
+            if (startScreenRoot != null && startButton == null && IsStartScreenExpected())
+            {
+                Debug.LogError("[FirstView] Start screen prefab is missing a StartGameButton with a Button component.");
+                valid = false;
+            }
+
+            if (startScreenRoot != null && startButton == null && !IsStartScreenExpected())
             {
                 Debug.LogWarning("[FirstView] Start screen root is assigned but start button is missing; game will auto-start.");
+            }
+
+            if (startScreenRoot != null && startScreenRoot.GetComponentInParent<Canvas>() == null)
+            {
+                Debug.LogError("[FirstView] Start screen root must include a Canvas component or be parented under one.");
+                valid = false;
+            }
+
+            if (startScreenInstantiated && startScreenRoot != null && startScreenRoot.scene != gameObject.scene)
+            {
+                Debug.LogError("[FirstView] Instantiated start screen is not in the active gameplay scene.");
+                valid = false;
             }
 
             startupReferencesValid = valid;
