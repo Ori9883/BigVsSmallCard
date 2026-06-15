@@ -28,7 +28,7 @@ namespace FirstView.Gameplay
         public readonly bool HasPlayerPlayedPublicCard;
         public readonly PublicCardInfo PlayerPlayedPublicCard;
         public readonly List<SettledRoundRecord> SettledHistory;
-        public readonly GameCard RemovedCard;
+        public readonly PublicCardInfo RemovedCardPublicInfo;
         public readonly int CurrentRound;
         public readonly int PlayerScore;
         public readonly int EnemyScore;
@@ -40,7 +40,7 @@ namespace FirstView.Gameplay
             bool hasPlayerPlayedPublicCard,
             PublicCardInfo playerPlayedPublicCard,
             List<SettledRoundRecord> settledHistory,
-            GameCard removedCard,
+            PublicCardInfo removedCardPublicInfo,
             int currentRound,
             int playerScore,
             int enemyScore,
@@ -51,7 +51,7 @@ namespace FirstView.Gameplay
             HasPlayerPlayedPublicCard = hasPlayerPlayedPublicCard;
             PlayerPlayedPublicCard = playerPlayedPublicCard;
             SettledHistory = settledHistory;
-            RemovedCard = removedCard;
+            RemovedCardPublicInfo = removedCardPublicInfo;
             CurrentRound = currentRound;
             PlayerScore = playerScore;
             EnemyScore = enemyScore;
@@ -139,9 +139,9 @@ namespace FirstView.Gameplay
             float pressure = GetScorePressure(context);
             float preservation = GetPreservationValue(candidate, hand, context, 1.6f);
             float winRate = EstimateWinRate(candidate, inferredPlayerCards, 0.35f);
-            float value = GetCardPower(candidate) * 4f;
-            float secondTurnWeight = context.EnemyActsSecond ? 12f : 0f;
-            return winRate * (30f + roundScore + secondTurnWeight) + value + pressure - preservation;
+            float value = GetCardPower(candidate) * 3f;
+            float secondTurnWeight = context.EnemyActsSecond ? 6f : 0f;
+            return winRate * (20f + roundScore * 0.8f + secondTurnWeight) + value + pressure - preservation + Random.Range(0f, 3f);
         }
 
         private static float ScoreGod(GameCard candidate, List<GameCard> hand, List<GameCard> inferredPlayerCards, EnemyAIDecisionContext context)
@@ -152,14 +152,14 @@ namespace FirstView.Gameplay
             float winRate = EstimateWinRate(candidate, inferredPlayerCards, 0.4f);
             float denyValue = EstimatePlayerThreat(inferredPlayerCards) * 0.35f;
             float preservation = GetPreservationValue(candidate, hand, context, 2.4f);
-            float secondTurnWeight = context.EnemyActsSecond ? 20f : 0f;
+            float secondTurnWeight = context.EnemyActsSecond ? 12f : 0f;
             return winRate * (55f + roundScore * 1.4f + secondTurnWeight) + futureValue + denyValue + scoreSwingNeed - preservation;
         }
 
         private static List<GameCard> BuildInferredPlayerCards(List<GameCard> enemyHand, EnemyAIDecisionContext context)
         {
             List<GameCard> pool = Deck.CreateFullDeck();
-            RemoveKnownCard(pool, context.RemovedCard);
+            RemoveOneUnknownCardOfColor(pool, context.RemovedCardPublicInfo.Color);
 
             for (int i = 0; i < enemyHand.Count; i++)
                 RemoveKnownCard(pool, enemyHand[i]);
@@ -186,8 +186,8 @@ namespace FirstView.Gameplay
             switch (difficulty)
             {
                 case EnemyAIDifficulty.God: return 1f;
-                case EnemyAIDifficulty.Strong: return 0.85f;
-                default: return 0.35f;
+                case EnemyAIDifficulty.Strong: return 0.5f;
+                default: return 0.1f;
             }
         }
 
@@ -223,6 +223,18 @@ namespace FirstView.Gameplay
             for (int i = 0; i < pool.Count; i++)
             {
                 if (pool[i].Color == knownCard.Color && pool[i].Number == knownCard.Number)
+                {
+                    pool.RemoveAt(i);
+                    return;
+                }
+            }
+        }
+
+        private static void RemoveOneUnknownCardOfColor(List<GameCard> pool, CardColor color)
+        {
+            for (int i = 0; i < pool.Count; i++)
+            {
+                if (pool[i].Color == color)
                 {
                     pool.RemoveAt(i);
                     return;
@@ -299,7 +311,7 @@ namespace FirstView.Gameplay
 
         private static float GetCardPower(GameCard card)
         {
-            return card.Number == 1 ? 5.4f : card.Number;
+            return card.Number == 1 ? 4.4f : card.Number;
         }
 
         private static float GetCurrentRoundScore(EnemyAIDecisionContext context)

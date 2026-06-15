@@ -541,7 +541,7 @@ namespace FirstView
                 hasPlayerPlayedPublicCard,
                 playerPlayedPublicCard,
                 session.SettledHistory,
-                session.RemovedCard,
+                new PublicCardInfo(session.RemovedCard.Color),
                 session.CurrentRound,
                 session.PlayerScore,
                 session.EnemyScore,
