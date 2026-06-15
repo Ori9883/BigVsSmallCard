@@ -5,6 +5,13 @@ using UnityEngine.UI;
 
 namespace FirstView
 {
+    public enum FirstRoundStarterMode
+    {
+        Player,
+        Enemy,
+        Random
+    }
+
     public class FirstViewScene : MonoBehaviour
     {
         [Header("Camera")]
@@ -39,6 +46,9 @@ namespace FirstView
         [SerializeField] private Toggle normalAIToggle;
         [SerializeField] private Toggle strongAIToggle;
         [SerializeField] private Toggle godAIToggle;
+
+        [Header("Debug Gameplay")]
+        [SerializeField] private FirstRoundStarterMode firstRoundStarterMode = FirstRoundStarterMode.Random;
 
         [Header("Layout")]
         [SerializeField] private float handCardSpacing = 0.068f;
@@ -217,7 +227,21 @@ namespace FirstView
             WireSession();
             WireInteraction();
             cameraRig.Initialize("Hand");
+            session.SetFirstRoundPlayerIsFirst(ResolveFirstRoundPlayerIsFirst());
             session.BeginGame();
+        }
+
+        private bool ResolveFirstRoundPlayerIsFirst()
+        {
+            switch (firstRoundStarterMode)
+            {
+                case FirstRoundStarterMode.Enemy:
+                    return false;
+                case FirstRoundStarterMode.Random:
+                    return Random.value >= 0.5f;
+                default:
+                    return true;
+            }
         }
 
         private EnemyAIDifficulty ReadSelectedAIDifficulty()

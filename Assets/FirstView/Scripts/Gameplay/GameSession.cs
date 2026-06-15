@@ -31,7 +31,8 @@ namespace FirstView.Gameplay
         public int EnemyScore { get; private set; }
         public int CurrentRound { get; private set; }
         public RoundPhase Phase { get; private set; }
-        public bool PlayerIsFirst => CurrentRound % 2 == 1;
+        public bool FirstRoundPlayerIsFirst { get; private set; } = true;
+        public bool PlayerIsFirst => FirstRoundPlayerIsFirst ? CurrentRound % 2 == 1 : CurrentRound % 2 == 0;
 
         public int PlayerPlayedIndex { get; private set; } = -1;
         public int EnemyPlayedIndex { get; private set; } = -1;
@@ -41,6 +42,11 @@ namespace FirstView.Gameplay
         public System.Action OnBothCardsPlayed;
         public System.Action<int, int, int> OnSettled;
         public System.Action<int, int> OnGameOver;
+
+        public void SetFirstRoundPlayerIsFirst(bool playerIsFirst)
+        {
+            FirstRoundPlayerIsFirst = playerIsFirst;
+        }
 
         public void BeginGame()
         {
