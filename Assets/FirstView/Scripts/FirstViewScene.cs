@@ -510,6 +510,7 @@ namespace FirstView
             card.SetSlotTransform(enemyFieldSlots[0].transform);
             enemyFieldSlots[0].PlaceCard(card);
             enemyFieldCard = card;
+            RearrangeEnemyHand();
 
             session.SetPlayedIndex(false, aiPick);
             session.OnCardPlayed(false);
@@ -683,6 +684,28 @@ namespace FirstView
 
                 handCards[i].PlayPlaceAnimation(cardPos, cardRot);
                 handCards[i].SetBasePose(cardPos, cardRot);
+            }
+        }
+
+        private void RearrangeEnemyHand()
+        {
+            int count = enemyHandCards.Count;
+            if (count == 0) return;
+
+            Transform enemyAnchor = opponentHandAnchor != null ? opponentHandAnchor : opponentAnchor;
+            if (enemyAnchor == null) return;
+
+            for (int i = 0; i < count; i++)
+            {
+                float normalizedPos = count == 1 ? 0f : (float)i / (count - 1) - 0.5f;
+                float xOffset = normalizedPos * handCardSpacing * (count - 1);
+                float yOffset = Mathf.Abs(normalizedPos) * handLiftY * 2f;
+
+                Vector3 cardPos = enemyAnchor.position + enemyAnchor.right * xOffset + enemyAnchor.up * yOffset;
+                Quaternion cardRot = Quaternion.identity;
+
+                enemyHandCards[i].PlayPlaceAnimation(cardPos, cardRot);
+                enemyHandCards[i].SetBasePose(cardPos, cardRot);
             }
         }
 
