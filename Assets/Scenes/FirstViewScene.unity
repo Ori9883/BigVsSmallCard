@@ -2849,6 +2849,7 @@ MonoBehaviour:
   normalAIToggle: {fileID: 0}
   strongAIToggle: {fileID: 0}
   godAIToggle: {fileID: 0}
+  firstRoundStarterMode: 1
   handCardSpacing: 0.068
   handFanAngle: 6
   handLiftY: 0.001
