@@ -47,6 +47,14 @@ namespace FirstView
         [SerializeField] private Toggle strongAIToggle;
         [SerializeField] private Toggle godAIToggle;
 
+        [Header("End Screen")]
+        [SerializeField] private string endScreenPrefabResourcePath = "EndScreenCanvas";
+        [SerializeField] private GameObject endScreenRoot;
+        [SerializeField] private Text resultText;
+        [SerializeField] private Text scoreText;
+        [SerializeField] private Button replayButton;
+        [SerializeField] private Button homeButton;
+
         [Header("Debug Gameplay")]
         [SerializeField] private FirstRoundStarterMode firstRoundStarterMode = FirstRoundStarterMode.Random;
 
@@ -93,6 +101,7 @@ namespace FirstView
             opponentTransform = EnsureEntity("Opponent", new Vector3(0f, 1.2f, 1.5f));
 
             EnsureStartScreen();
+            EnsureEndScreen();
             startupReferencesValid = ValidateStartupReferences();
             ShowStartScreen();
             if (startButton != null)
@@ -143,6 +152,59 @@ namespace FirstView
             }
 
             ResolveAIDifficultyToggles();
+        }
+
+        private void EnsureEndScreen()
+        {
+            if (endScreenRoot == null && !string.IsNullOrWhiteSpace(endScreenPrefabResourcePath))
+            {
+                GameObject endScreenPrefab = Resources.Load<GameObject>(endScreenPrefabResourcePath);
+                if (endScreenPrefab == null)
+                {
+                    Debug.LogError("[FirstView] End screen prefab not found at Resources/" + endScreenPrefabResourcePath);
+                }
+                else
+                {
+                    endScreenRoot = Instantiate(endScreenPrefab);
+                    endScreenRoot.name = endScreenPrefab.name;
+                }
+            }
+
+            if (endScreenRoot == null) return;
+
+            if (resultText == null)
+                resultText = FindTextRecursive(endScreenRoot.transform, "ResultText");
+            if (scoreText == null)
+                scoreText = FindTextRecursive(endScreenRoot.transform, "ScoreText");
+            if (replayButton == null)
+                replayButton = FindButtonRecursive(endScreenRoot.transform, "ReplayButton");
+            if (homeButton == null)
+                homeButton = FindButtonRecursive(endScreenRoot.transform, "HomeButton");
+
+            endScreenRoot.SetActive(false);
+
+            if (replayButton != null)
+            {
+                replayButton.onClick.RemoveListener(ReplayGameFromEndScreen);
+                replayButton.onClick.AddListener(ReplayGameFromEndScreen);
+            }
+            if (homeButton != null)
+            {
+                homeButton.onClick.RemoveListener(ReturnHomeFromEndScreen);
+                homeButton.onClick.AddListener(ReturnHomeFromEndScreen);
+            }
+        }
+
+        private static Text FindTextRecursive(Transform parent, string childName)
+        {
+            Transform child = FindChildRecursive(parent, childName);
+            return child != null ? child.GetComponent<Text>() : null;
+        }
+
+        private static Button FindButtonRecursive(Transform parent, string childName)
+        {
+            Transform child = FindChildRecursive(parent, childName);
+            return child != null ? child.GetComponent<Button>() : null;
         }
 
         private void ResolveAIDifficultyToggles()
@@ -292,6 +354,18 @@ namespace FirstView
             if (startScreenRoot != null && startScreenRoot.GetComponentInParent<Canvas>() == null)
             {
                 Debug.LogError("[FirstView] Start screen root must include a Canvas component or be parented under one.");
+                valid = false;
+            }
+
+            if (endScreenRoot != null && endScreenRoot.GetComponent<Canvas>() == null && endScreenRoot.GetComponentInParent<Canvas>(true) == null)
+            {
+                Debug.LogError("[FirstView] End screen root must include a Canvas component or be parented under one.");
+                valid = false;
+            }
+
+            if (endScreenRoot != null && (resultText == null || scoreText == null || replayButton == null || homeButton == null))
+            {
+                Debug.LogError("[FirstView] End screen prefab must include ResultText, ScoreText, ReplayButton, and HomeButton.");
                 valid = false;
             }
 
@@ -490,13 +564,26 @@ namespace FirstView
 
         private void WireSession()
         {
+            UnwireSession();
             session.OnRoundStart += HandleRoundStart;
             session.OnTurnStart += HandleTurnStart;
             session.OnBothCardsPlayed += HandleBothCardsPlayed;
             session.OnSettled += HandleSettled;
+            session.OnGameOver += HandleGameOver;
 
             if (playerScoreDisplay != null) playerScoreDisplay.SetValueImmediate(0);
             if (enemyScoreDisplay != null) enemyScoreDisplay.SetValueImmediate(0);
+        }
+
+        private void UnwireSession()
+        {
+            if (session == null) return;
+
+            session.OnRoundStart -= HandleRoundStart;
+            session.OnTurnStart -= HandleTurnStart;
+            session.OnBothCardsPlayed -= HandleBothCardsPlayed;
+            session.OnSettled -= HandleSettled;
+            session.OnGameOver -= HandleGameOver;
         }
 
         private void HandleRoundStart()
@@ -609,6 +696,97 @@ namespace FirstView
             cameraRig.FocusTo("Hand");
         }
 
+        private void HandleGameOver(int playerScore, int enemyScore)
+        {
+            StopAllCoroutines();
+            HighlightPlayerSlots(false);
+            pendingSelectedCard = null;
+
+            if (resultText != null)
+            {
+                if (playerScore > enemyScore) resultText.text = "恭喜获胜";
+                else if (enemyScore > playerScore) resultText.text = "你输了";
+                else resultText.text = "平局";
+            }
+
+            if (scoreText != null)
+                scoreText.text = $"玩家 {playerScore} : {enemyScore} 对手";
+
+            if (endScreenRoot != null)
+                endScreenRoot.SetActive(true);
+        }
+
+        private void ReplayGameFromEndScreen()
+        {
+            if (endScreenRoot != null)
+                endScreenRoot.SetActive(false);
+
+            ResetRuntimeGameState();
+            gameStarted = true;
+            selectedAIDifficulty = ReadSelectedAIDifficulty();
+            CreateFieldSlots();
+            cameraRig.Initialize("Hand");
+            session.SetFirstRoundPlayerIsFirst(ResolveFirstRoundPlayerIsFirst());
+            session.BeginGame();
+        }
+
+        private void ReturnHomeFromEndScreen()
+        {
+            if (endScreenRoot != null)
+                endScreenRoot.SetActive(false);
+
+            ResetRuntimeGameState();
+            gameStarted = false;
+            ShowStartScreen();
+
+            if (startButton != null)
+            {
+                startButton.onClick.RemoveListener(StartGameFromStartScreen);
+                startButton.onClick.AddListener(StartGameFromStartScreen);
+                startButton.interactable = startupReferencesValid;
+            }
+        }
+
+        private void ResetRuntimeGameState()
+        {
+            StopAllCoroutines();
+            HighlightPlayerSlots(false);
+            pendingSelectedCard = null;
+
+            DestroyCardIfAlive(playerFieldCard);
+            DestroyCardIfAlive(enemyFieldCard);
+            playerFieldCard = null;
+            enemyFieldCard = null;
+
+            for (int i = 0; i < handCards.Count; i++)
+                DestroyCardIfAlive(handCards[i]);
+            handCards.Clear();
+
+            for (int i = 0; i < enemyHandCards.Count; i++)
+                DestroyCardIfAlive(enemyHandCards[i]);
+            enemyHandCards.Clear();
+
+            if (discardPile != null)
+                discardPile.DestroyCardsAndClear();
+
+            for (int i = 0; i < myFieldSlots.Count; i++)
+                if (myFieldSlots[i] != null) Destroy(myFieldSlots[i].gameObject);
+            myFieldSlots.Clear();
+
+            for (int i = 0; i < enemyFieldSlots.Count; i++)
+                if (enemyFieldSlots[i] != null) Destroy(enemyFieldSlots[i].gameObject);
+            enemyFieldSlots.Clear();
+
+            if (playerScoreDisplay != null) playerScoreDisplay.SetValueImmediate(0);
+            if (enemyScoreDisplay != null) enemyScoreDisplay.SetValueImmediate(0);
+        }
+
+        private static void DestroyCardIfAlive(Card3D card)
+        {
+            if (card != null)
+                Destroy(card.gameObject);
+        }
+
         private void ClearFieldCards()
         {
             if (playerFieldCard != null && discardPile != null) discardPile.AddCard(playerFieldCard);
@@ -624,11 +802,23 @@ namespace FirstView
         {
             if (interactor == null) return;
 
+            UnwireInteraction();
             interactor.OnCardClicked += HandleCardClicked;
             interactor.OnCardPlaced += HandleCardPlaced;
             interactor.OnCardDeselected += HandleCardDeselected;
             interactor.OnEnvironmentClicked += HandleEnvironmentClicked;
             interactor.OnDiscardPileClicked += HandleDiscardPileClicked;
+        }
+
+        private void UnwireInteraction()
+        {
+            if (interactor == null) return;
+
+            interactor.OnCardClicked -= HandleCardClicked;
+            interactor.OnCardPlaced -= HandleCardPlaced;
+            interactor.OnCardDeselected -= HandleCardDeselected;
+            interactor.OnEnvironmentClicked -= HandleEnvironmentClicked;
+            interactor.OnDiscardPileClicked -= HandleDiscardPileClicked;
         }
 
         private void HandleCardClicked(Card3D card)
@@ -740,20 +930,23 @@ namespace FirstView
                 startButton.onClick.RemoveListener(StartGameFromStartScreen);
             }
 
+            if (replayButton != null)
+            {
+                replayButton.onClick.RemoveListener(ReplayGameFromEndScreen);
+            }
+
+            if (homeButton != null)
+            {
+                homeButton.onClick.RemoveListener(ReturnHomeFromEndScreen);
+            }
+
             if (interactor != null)
             {
-                interactor.OnCardClicked -= HandleCardClicked;
-                interactor.OnCardPlaced -= HandleCardPlaced;
-                interactor.OnCardDeselected -= HandleCardDeselected;
-                interactor.OnEnvironmentClicked -= HandleEnvironmentClicked;
-                interactor.OnDiscardPileClicked -= HandleDiscardPileClicked;
+                UnwireInteraction();
             }
             if (session != null)
             {
-                session.OnRoundStart -= HandleRoundStart;
-                session.OnTurnStart -= HandleTurnStart;
-                session.OnBothCardsPlayed -= HandleBothCardsPlayed;
-                session.OnSettled -= HandleSettled;
+                UnwireSession();
             }
         }
     }

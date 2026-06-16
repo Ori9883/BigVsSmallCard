@@ -44,6 +44,25 @@ namespace FirstView
             expanded = false;
         }
 
+        public void DestroyCardsAndClear()
+        {
+            foreach (var c in cards)
+            {
+                if (c != null)
+                {
+                    c.owningPile = null;
+                    Destroy(c.gameObject);
+                }
+            }
+
+            cards.Clear();
+            expanded = false;
+
+            var pileCol = GetComponent<Collider>();
+            if (pileCol != null)
+                pileCol.enabled = true;
+        }
+
         public void ToggleExpand()
         {
             expanded = !expanded;
