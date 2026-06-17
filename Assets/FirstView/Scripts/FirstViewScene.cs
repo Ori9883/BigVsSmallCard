@@ -68,6 +68,7 @@ namespace FirstView
         [Header("Score Displays")]
         [SerializeField] private ScoreCounterDisplay playerScoreDisplay;
         [SerializeField] private ScoreCounterDisplay enemyScoreDisplay;
+        [SerializeField] private ScoreCounterDisplay monitorScoreDisplay;
 
         [Header("Discard Pile")]
         [SerializeField] private DiscardPile discardPile;
@@ -573,6 +574,7 @@ namespace FirstView
 
             if (playerScoreDisplay != null) playerScoreDisplay.SetValueImmediate(0);
             if (enemyScoreDisplay != null) enemyScoreDisplay.SetValueImmediate(0);
+            if (monitorScoreDisplay != null) monitorScoreDisplay.SetValueImmediate(0);
         }
 
         private void UnwireSession()
@@ -591,6 +593,15 @@ namespace FirstView
             ClearFieldCards();
             if (handCards.Count == 0 && enemyHandCards.Count == 0)
                 DealCards();
+            UpdateMonitorRoundScore();
+        }
+
+        private void UpdateMonitorRoundScore()
+        {
+            if (monitorScoreDisplay == null || session == null) return;
+            if (session.CurrentRound < 1) return;
+            int roundScore = ScoreSystem.GetRoundScore(session.CurrentRound - 1);
+            monitorScoreDisplay.AnimateTo(roundScore);
         }
 
         private void HandleTurnStart(bool isPlayerTurn)
@@ -692,7 +703,6 @@ namespace FirstView
                 playerScoreDisplay.AnimateTo(session.PlayerScore);
             if (enemyScoreDisplay != null)
                 enemyScoreDisplay.AnimateTo(session.EnemyScore);
-
             cameraRig.FocusTo("Hand");
         }
 
@@ -779,6 +789,7 @@ namespace FirstView
 
             if (playerScoreDisplay != null) playerScoreDisplay.SetValueImmediate(0);
             if (enemyScoreDisplay != null) enemyScoreDisplay.SetValueImmediate(0);
+            if (monitorScoreDisplay != null) monitorScoreDisplay.SetValueImmediate(0);
         }
 
         private static void DestroyCardIfAlive(Card3D card)
