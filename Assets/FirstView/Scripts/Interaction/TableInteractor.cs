@@ -223,6 +223,8 @@ namespace FirstView
                     return;
                 }
             }
+
+            OnEnvironmentClicked?.Invoke(string.Empty);
         }
 
         public void SelectCard(Card3D card)

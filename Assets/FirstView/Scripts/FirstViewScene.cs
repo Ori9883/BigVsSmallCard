@@ -30,6 +30,8 @@ namespace FirstView
         [SerializeField] private Transform opponentAnchor;
         [SerializeField] private Transform opponentHandAnchor;
         [SerializeField] private Transform deckPosition;
+        [SerializeField] private Transform removedCardAnchor;
+        [SerializeField] private GameObject removedCardArrow;
 
         [Header("Card Prefab")]
         [SerializeField] private string cardPrefabResourcePath = "P_Card_Template";
@@ -81,6 +83,7 @@ namespace FirstView
         private Card3D pendingSelectedCard;
         private Card3D playerFieldCard;
         private Card3D enemyFieldCard;
+        private Card3D removedCardVisual;
         private int playerPlayedHandIndex;
         private GameObject cardPrefabInstance;
         private Transform playerTransform;
@@ -88,6 +91,7 @@ namespace FirstView
         private bool gameStarted;
         private bool startupReferencesValid;
         private bool startScreenInstantiated;
+        private bool removedCardInspectRevealed;
         private EnemyAIDifficulty selectedAIDifficulty = EnemyAIDifficulty.Normal;
 
         private void Start()
@@ -483,6 +487,9 @@ namespace FirstView
         {
             if (session.PlayerHand == null) return;
 
+            EnsureRemovedCardAnchor();
+            EnsureRemovedCardArrow();
+
             int playerCount = session.PlayerHand.Count;
             for (int i = 0; i < playerCount; i++)
             {
@@ -531,6 +538,76 @@ namespace FirstView
                     enemyHandCards.Add(card);
                 }
             }
+
+            CreateRemovedCardVisual();
+        }
+
+        private void EnsureRemovedCardAnchor()
+        {
+            if (removedCardAnchor != null) return;
+
+            GameObject anchor = GameObject.Find("removedcard");
+            if (anchor == null) anchor = GameObject.Find("RemovedCard");
+            if (anchor != null) removedCardAnchor = anchor.transform;
+        }
+
+        private void EnsureRemovedCardArrow()
+        {
+            if (removedCardArrow != null) return;
+
+            removedCardArrow = new GameObject("RemovedCardArrow");
+            if (tableSurface != null) removedCardArrow.transform.SetParent(tableSurface, true);
+
+            GameObject shaft = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            shaft.name = "Shaft";
+            shaft.transform.SetParent(removedCardArrow.transform, false);
+            shaft.transform.localScale = new Vector3(0.012f, 0.012f, 0.16f);
+
+            GameObject head = new GameObject("Head");
+            head.transform.SetParent(removedCardArrow.transform, false);
+            head.transform.localPosition = new Vector3(0f, 0f, 0.095f);
+            var meshFilter = head.AddComponent<MeshFilter>();
+            meshFilter.mesh = CreateArrowHeadMesh();
+            head.AddComponent<MeshRenderer>();
+
+            var material = new Material(Shader.Find("Universal Render Pipeline/Lit"));
+            material.SetColor("_BaseColor", new Color(0.2f, 1f, 0.25f, 0.9f));
+            shaft.GetComponent<MeshRenderer>().material = material;
+            head.GetComponent<MeshRenderer>().material = material;
+
+            Destroy(shaft.GetComponent<Collider>());
+            removedCardArrow.SetActive(false);
+        }
+
+        private static Mesh CreateArrowHeadMesh()
+        {
+            var mesh = new Mesh();
+            mesh.vertices = new[]
+            {
+                new Vector3(0f, 0f, 0.04f),
+                new Vector3(-0.035f, 0f, -0.035f),
+                new Vector3(0.035f, 0f, -0.035f),
+                new Vector3(0f, 0.03f, -0.035f)
+            };
+            mesh.triangles = new[] { 0, 1, 3, 0, 3, 2, 0, 2, 1, 1, 2, 3 };
+            mesh.RecalculateNormals();
+            return mesh;
+        }
+
+        private void CreateRemovedCardVisual()
+        {
+            if (removedCardAnchor == null || removedCardVisual != null) return;
+
+            removedCardVisual = CreateCard(session.RemovedCard);
+            if (removedCardVisual == null) return;
+
+            removedCardVisual.facing = CardFacing.FaceDown;
+            removedCardVisual.faceTarget = playerTransform;
+            removedCardVisual.SetBasePose(removedCardAnchor.position, removedCardAnchor.rotation);
+            removedCardVisual.PlayDrawAnimation(
+                deckPosition != null ? deckPosition.position : removedCardAnchor.position + Vector3.up * 0.1f,
+                removedCardAnchor.rotation,
+                0.8f);
         }
 
         private static readonly Dictionary<CardColor, string> ColorNames = new Dictionary<CardColor, string>
@@ -570,6 +647,7 @@ namespace FirstView
             session.OnTurnStart += HandleTurnStart;
             session.OnBothCardsPlayed += HandleBothCardsPlayed;
             session.OnSettled += HandleSettled;
+            session.OnRemovedCardInspectStarted += HandleRemovedCardInspectStarted;
             session.OnGameOver += HandleGameOver;
 
             if (playerScoreDisplay != null) playerScoreDisplay.SetValueImmediate(0);
@@ -585,6 +663,7 @@ namespace FirstView
             session.OnTurnStart -= HandleTurnStart;
             session.OnBothCardsPlayed -= HandleBothCardsPlayed;
             session.OnSettled -= HandleSettled;
+            session.OnRemovedCardInspectStarted -= HandleRemovedCardInspectStarted;
             session.OnGameOver -= HandleGameOver;
         }
 
@@ -706,6 +785,99 @@ namespace FirstView
             cameraRig.FocusTo("Hand");
         }
 
+        private void HandleRemovedCardInspectStarted()
+        {
+            removedCardInspectRevealed = false;
+            EnsureRemovedCardAnchor();
+            EnsureRemovedCardArrow();
+            CreateRemovedCardVisual();
+            MoveRemovedCardVisualToAnchor(false);
+            ShowRemovedCardArrow(true);
+            cameraRig.FocusTo("Hand");
+        }
+
+        private void RevealRemovedCardForInspect()
+        {
+            if (removedCardVisual == null) return;
+
+            removedCardInspectRevealed = true;
+            ShowRemovedCardArrow(false);
+            removedCardVisual.FlipReveal();
+            cameraRig.FocusTo("Hand");
+        }
+
+        private void SkipRemovedCardInspect()
+        {
+            if (session == null || session.Phase != RoundPhase.RemovedCardInspect) return;
+            if (session.HasResolvedRemovedCardInspect) return;
+
+            removedCardInspectRevealed = false;
+            MoveRemovedCardVisualToAnchor(false);
+            ShowRemovedCardArrow(false);
+            session.ContinueAfterRemovedCardInspect();
+        }
+
+        private void SwapRemovedCardWithHand(Card3D handCard)
+        {
+            int handIndex = handCards.IndexOf(handCard);
+            if (handIndex < 0) return;
+            if (session.HasResolvedRemovedCardInspect) return;
+            if (!session.TryGetRemovedCardSwapPreview(handIndex, out GameCard incomingHandCard)) return;
+
+            Card3D newHandVisual = CreateCard(incomingHandCard);
+            if (newHandVisual == null)
+            {
+                Debug.LogError("[FirstView] Failed to create swapped hand card visual.");
+                return;
+            }
+
+            if (!session.TrySwapRemovedCardWithPlayerHand(handIndex))
+            {
+                DestroyCardIfAlive(newHandVisual);
+                return;
+            }
+
+            DestroyCardIfAlive(handCards[handIndex]);
+            newHandVisual.facing = CardFacing.FacePlayer;
+            newHandVisual.faceTarget = playerTransform;
+            handCards[handIndex] = newHandVisual;
+
+            DestroyCardIfAlive(removedCardVisual);
+            removedCardVisual = null;
+            CreateRemovedCardVisual();
+            MoveRemovedCardVisualToAnchor(false);
+            ShowRemovedCardArrow(false);
+            removedCardInspectRevealed = false;
+            RearrangeHand();
+            session.ContinueAfterRemovedCardInspect();
+        }
+
+        private void MoveRemovedCardVisualToAnchor(bool faceUp)
+        {
+            if (removedCardVisual == null || removedCardAnchor == null) return;
+
+            removedCardVisual.facing = faceUp ? CardFacing.FaceUp : CardFacing.FaceDown;
+            removedCardVisual.SetSlotTransform(removedCardAnchor);
+            removedCardVisual.PlayPlaceAnimation(removedCardAnchor.position, removedCardAnchor.rotation);
+            removedCardVisual.SetBasePose(removedCardAnchor.position, removedCardAnchor.rotation);
+        }
+
+        private void ShowRemovedCardArrow(bool show)
+        {
+            if (removedCardArrow == null || removedCardAnchor == null) return;
+
+            removedCardArrow.SetActive(show);
+            if (!show) return;
+
+            Vector3 fromHand = handAnchor != null ? handAnchor.position : removedCardAnchor.position - Vector3.forward * 0.2f;
+            Vector3 direction = removedCardAnchor.position - fromHand;
+            direction.y = 0f;
+            if (direction.sqrMagnitude < 0.0001f) direction = Vector3.forward;
+
+            removedCardArrow.transform.position = removedCardAnchor.position - direction.normalized * 0.12f + Vector3.up * 0.04f;
+            removedCardArrow.transform.rotation = Quaternion.LookRotation(direction.normalized, Vector3.up);
+        }
+
         private void HandleGameOver(int playerScore, int enemyScore)
         {
             StopAllCoroutines();
@@ -765,8 +937,12 @@ namespace FirstView
 
             DestroyCardIfAlive(playerFieldCard);
             DestroyCardIfAlive(enemyFieldCard);
+            DestroyCardIfAlive(removedCardVisual);
             playerFieldCard = null;
             enemyFieldCard = null;
+            removedCardVisual = null;
+            removedCardInspectRevealed = false;
+            ShowRemovedCardArrow(false);
 
             for (int i = 0; i < handCards.Count; i++)
                 DestroyCardIfAlive(handCards[i]);
@@ -834,6 +1010,19 @@ namespace FirstView
 
         private void HandleCardClicked(Card3D card)
         {
+            if (session.Phase == RoundPhase.RemovedCardInspect)
+            {
+                if (card == removedCardVisual)
+                {
+                    RevealRemovedCardForInspect();
+                }
+                else if (removedCardInspectRevealed && handCards.Contains(card))
+                {
+                    SwapRemovedCardWithHand(card);
+                }
+                return;
+            }
+
             bool isPlayerTurn = (session.PlayerIsFirst && session.Phase == RoundPhase.FirstTurn)
                              || (!session.PlayerIsFirst && session.Phase == RoundPhase.SecondTurn);
 
@@ -880,6 +1069,14 @@ namespace FirstView
 
         private void HandleEnvironmentClicked(string focusId)
         {
+            if (session.Phase == RoundPhase.RemovedCardInspect)
+            {
+                if (removedCardInspectRevealed)
+                    SkipRemovedCardInspect();
+                return;
+            }
+
+            if (string.IsNullOrEmpty(focusId)) return;
             cameraRig.FocusTo(focusId);
         }
 

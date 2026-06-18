@@ -8,6 +8,7 @@ namespace FirstView.Gameplay
         SecondTurn,
         Reveal,
         Settlement,
+        RemovedCardInspect,
         GameOver
     }
 }
