@@ -869,13 +869,13 @@ namespace FirstView
             removedCardArrow.SetActive(show);
             if (!show) return;
 
-            Vector3 fromHand = handAnchor != null ? handAnchor.position : removedCardAnchor.position - Vector3.forward * 0.2f;
-            Vector3 direction = removedCardAnchor.position - fromHand;
-            direction.y = 0f;
-            if (direction.sqrMagnitude < 0.0001f) direction = Vector3.forward;
+            Vector3 tableNormal = removedCardAnchor.up.sqrMagnitude > 0.0001f
+                ? removedCardAnchor.up.normalized
+                : Vector3.up;
+            Vector3 directionToCard = -tableNormal;
 
-            removedCardArrow.transform.position = removedCardAnchor.position - direction.normalized * 0.12f + Vector3.up * 0.04f;
-            removedCardArrow.transform.rotation = Quaternion.LookRotation(direction.normalized, Vector3.up);
+            removedCardArrow.transform.position = removedCardAnchor.position + tableNormal * 0.18f;
+            removedCardArrow.transform.rotation = Quaternion.LookRotation(directionToCard, removedCardAnchor.forward);
         }
 
         private void HandleGameOver(int playerScore, int enemyScore)
