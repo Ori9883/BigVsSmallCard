@@ -34,6 +34,7 @@ namespace FirstView.Gameplay
         public bool FirstRoundPlayerIsFirst { get; private set; } = true;
         public bool PlayerIsFirst => FirstRoundPlayerIsFirst ? CurrentRound % 2 == 1 : CurrentRound % 2 == 0;
         public bool HasResolvedRemovedCardInspect { get; private set; }
+        public bool RemovedCardInspectOwnerIsPlayer { get; private set; }
 
         public int PlayerPlayedIndex { get; private set; } = -1;
         public int EnemyPlayedIndex { get; private set; } = -1;
@@ -69,6 +70,7 @@ namespace FirstView.Gameplay
             EnemyScore = 0;
             CurrentRound = 0;
             HasResolvedRemovedCardInspect = false;
+            RemovedCardInspectOwnerIsPlayer = false;
 
             LogHands();
             StartNextRound();
@@ -164,6 +166,7 @@ namespace FirstView.Gameplay
 
             if (ShouldStartRemovedCardInspect())
             {
+                RemovedCardInspectOwnerIsPlayer = PlayerScore > EnemyScore;
                 Phase = RoundPhase.RemovedCardInspect;
                 OnRemovedCardInspectStarted?.Invoke();
                 return;
@@ -174,26 +177,46 @@ namespace FirstView.Gameplay
 
         public bool TrySwapRemovedCardWithPlayerHand(int handIndex)
         {
-            if (Phase != RoundPhase.RemovedCardInspect) return false;
-            if (HasResolvedRemovedCardInspect) return false;
-            if (PlayerHand == null) return false;
-            if (handIndex < 0 || handIndex >= PlayerHand.Count) return false;
+            return TrySwapRemovedCardWithHand(true, handIndex);
+        }
 
-            GameCard handCard = PlayerHand[handIndex];
-            PlayerHand[handIndex] = RemovedCard;
-            RemovedCard = handCard;
-            return true;
+        public bool TrySwapRemovedCardWithEnemyHand(int handIndex)
+        {
+            return TrySwapRemovedCardWithHand(false, handIndex);
         }
 
         public bool TryGetRemovedCardSwapPreview(int handIndex, out GameCard incomingHandCard)
         {
+            return TryGetRemovedCardSwapPreview(true, handIndex, out incomingHandCard);
+        }
+
+        public bool TryGetRemovedCardSwapPreview(bool isPlayer, int handIndex, out GameCard incomingHandCard)
+        {
             incomingHandCard = default;
-            if (Phase != RoundPhase.RemovedCardInspect) return false;
-            if (HasResolvedRemovedCardInspect) return false;
-            if (PlayerHand == null) return false;
-            if (handIndex < 0 || handIndex >= PlayerHand.Count) return false;
+            if (!CanAccessRemovedCardInspectHand(isPlayer, handIndex, out _)) return false;
 
             incomingHandCard = RemovedCard;
+            return true;
+        }
+
+        private bool TrySwapRemovedCardWithHand(bool isPlayer, int handIndex)
+        {
+            if (!CanAccessRemovedCardInspectHand(isPlayer, handIndex, out List<GameCard> hand)) return false;
+
+            GameCard handCard = hand[handIndex];
+            hand[handIndex] = RemovedCard;
+            RemovedCard = handCard;
+            return true;
+        }
+
+        private bool CanAccessRemovedCardInspectHand(bool isPlayer, int handIndex, out List<GameCard> hand)
+        {
+            hand = isPlayer ? PlayerHand : EnemyHand;
+            if (Phase != RoundPhase.RemovedCardInspect) return false;
+            if (HasResolvedRemovedCardInspect) return false;
+            if (isPlayer != RemovedCardInspectOwnerIsPlayer) return false;
+            if (hand == null) return false;
+            if (handIndex < 0 || handIndex >= hand.Count) return false;
             return true;
         }
 
@@ -210,7 +233,7 @@ namespace FirstView.Gameplay
         {
             return CurrentRound == 3
                 && !HasResolvedRemovedCardInspect
-                && PlayerScore > EnemyScore;
+                && PlayerScore != EnemyScore;
         }
 
         private void EndGame()

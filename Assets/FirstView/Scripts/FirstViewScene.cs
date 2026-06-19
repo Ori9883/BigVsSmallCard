@@ -31,6 +31,9 @@ namespace FirstView
         [SerializeField] private Transform opponentHandAnchor;
         [SerializeField] private Transform deckPosition;
         [SerializeField] private Transform removedCardAnchor;
+        [SerializeField] private Transform thirdRoundPlayerCardAnchor;
+        [SerializeField] private Transform thirdRoundEnemyCardAnchor;
+        [SerializeField] private Transform thirdRoundDiscardAnchor;
         [SerializeField] private GameObject removedCardArrow;
 
         [Header("Card Prefab")]
@@ -77,6 +80,7 @@ namespace FirstView
 
         private readonly List<Card3D> handCards = new List<Card3D>();
         private readonly List<Card3D> enemyHandCards = new List<Card3D>();
+        private readonly List<Card3D> thirdRoundDiscardedCards = new List<Card3D>();
         private readonly List<CardSlot> myFieldSlots = new List<CardSlot>();
         private readonly List<CardSlot> enemyFieldSlots = new List<CardSlot>();
         private GameSession session;
@@ -551,6 +555,29 @@ namespace FirstView
             if (anchor != null) removedCardAnchor = anchor.transform;
         }
 
+        private void EnsureThirdRoundAnchors()
+        {
+            if (thirdRoundPlayerCardAnchor == null)
+                thirdRoundPlayerCardAnchor = FindSceneTransform("ThirdRoundcard_player");
+            if (thirdRoundEnemyCardAnchor == null)
+                thirdRoundEnemyCardAnchor = FindSceneTransform("ThirdRoundcard_enemy");
+            if (thirdRoundDiscardAnchor == null)
+                thirdRoundDiscardAnchor = FindSceneTransform("FP_DiscardPile");
+        }
+
+        private static Transform FindSceneTransform(string objectName)
+        {
+            GameObject anchors = GameObject.Find("Anchors");
+            if (anchors != null)
+            {
+                Transform match = FindChildRecursive(anchors.transform, objectName);
+                if (match != null) return match;
+            }
+
+            GameObject obj = GameObject.Find(objectName);
+            return obj != null ? obj.transform : null;
+        }
+
         private void EnsureRemovedCardArrow()
         {
             if (removedCardArrow != null) return;
@@ -789,11 +816,15 @@ namespace FirstView
         {
             removedCardInspectRevealed = false;
             EnsureRemovedCardAnchor();
+            EnsureThirdRoundAnchors();
             EnsureRemovedCardArrow();
             CreateRemovedCardVisual();
             MoveRemovedCardVisualToAnchor(false);
-            ShowRemovedCardArrow(true);
+            ShowRemovedCardArrow(session.RemovedCardInspectOwnerIsPlayer);
             cameraRig.FocusTo("Hand");
+
+            if (!session.RemovedCardInspectOwnerIsPlayer)
+                StartCoroutine(EnemyRemovedCardInspectCoroutine());
         }
 
         private void RevealRemovedCardForInspect()
@@ -802,7 +833,7 @@ namespace FirstView
 
             removedCardInspectRevealed = true;
             ShowRemovedCardArrow(false);
-            removedCardVisual.FlipReveal();
+            MoveRemovedCardVisualToInspectAnchor(true);
             cameraRig.FocusTo("Hand");
         }
 
@@ -822,6 +853,7 @@ namespace FirstView
             int handIndex = handCards.IndexOf(handCard);
             if (handIndex < 0) return;
             if (session.HasResolvedRemovedCardInspect) return;
+            if (!session.RemovedCardInspectOwnerIsPlayer) return;
             if (!session.TryGetRemovedCardSwapPreview(handIndex, out GameCard incomingHandCard)) return;
 
             Card3D newHandVisual = CreateCard(incomingHandCard);
@@ -837,18 +869,94 @@ namespace FirstView
                 return;
             }
 
-            DestroyCardIfAlive(handCards[handIndex]);
+            Card3D selectedHandVisual = handCards[handIndex];
             newHandVisual.facing = CardFacing.FacePlayer;
             newHandVisual.faceTarget = playerTransform;
             handCards[handIndex] = newHandVisual;
 
             DestroyCardIfAlive(removedCardVisual);
             removedCardVisual = null;
-            CreateRemovedCardVisual();
-            MoveRemovedCardVisualToAnchor(false);
+            MoveCardToThirdRoundDiscard(selectedHandVisual);
             ShowRemovedCardArrow(false);
             removedCardInspectRevealed = false;
             RearrangeHand();
+            session.ContinueAfterRemovedCardInspect();
+        }
+
+        private System.Collections.IEnumerator EnemyRemovedCardInspectCoroutine()
+        {
+            yield return new UnityEngine.WaitForSeconds(0.6f);
+            if (session == null || session.Phase != RoundPhase.RemovedCardInspect) yield break;
+            if (session.RemovedCardInspectOwnerIsPlayer) yield break;
+
+            MoveRemovedCardVisualToInspectAnchor(false);
+
+            yield return new UnityEngine.WaitForSeconds(0.8f);
+            if (ShouldEnemySwapRemovedCard(out int handIndex))
+                SwapRemovedCardWithEnemyHand(handIndex);
+            else
+                SkipRemovedCardInspect();
+        }
+
+        private bool ShouldEnemySwapRemovedCard(out int handIndex)
+        {
+            handIndex = -1;
+            if (session.EnemyHand == null || session.EnemyHand.Count == 0) return false;
+
+            int weakestIndex = 0;
+            int weakestPower = GetCardSwapPower(session.EnemyHand[0]);
+            for (int i = 1; i < session.EnemyHand.Count; i++)
+            {
+                int power = GetCardSwapPower(session.EnemyHand[i]);
+                if (power < weakestPower)
+                {
+                    weakestPower = power;
+                    weakestIndex = i;
+                }
+            }
+
+            if (GetCardSwapPower(session.RemovedCard) <= weakestPower) return false;
+
+            handIndex = weakestIndex;
+            return true;
+        }
+
+        private static int GetCardSwapPower(GameCard card)
+        {
+            return card.Number == 1 ? 6 : card.Number;
+        }
+
+        private void SwapRemovedCardWithEnemyHand(int handIndex)
+        {
+            if (handIndex < 0 || handIndex >= enemyHandCards.Count) return;
+            if (session.HasResolvedRemovedCardInspect) return;
+            if (session.RemovedCardInspectOwnerIsPlayer) return;
+            if (!session.TryGetRemovedCardSwapPreview(false, handIndex, out GameCard incomingHandCard)) return;
+
+            Card3D newEnemyHandVisual = CreateCard(incomingHandCard);
+            if (newEnemyHandVisual == null)
+            {
+                Debug.LogError("[FirstView] Failed to create swapped enemy hand card visual.");
+                return;
+            }
+
+            if (!session.TrySwapRemovedCardWithEnemyHand(handIndex))
+            {
+                DestroyCardIfAlive(newEnemyHandVisual);
+                return;
+            }
+
+            Card3D selectedEnemyHandVisual = enemyHandCards[handIndex];
+            newEnemyHandVisual.facing = CardFacing.FaceEnemy;
+            newEnemyHandVisual.faceTarget = opponentTransform;
+            enemyHandCards[handIndex] = newEnemyHandVisual;
+
+            DestroyCardIfAlive(removedCardVisual);
+            removedCardVisual = null;
+            MoveCardToThirdRoundDiscard(selectedEnemyHandVisual);
+            ShowRemovedCardArrow(false);
+            removedCardInspectRevealed = false;
+            RearrangeEnemyHand();
             session.ContinueAfterRemovedCardInspect();
         }
 
@@ -860,6 +968,42 @@ namespace FirstView
             removedCardVisual.SetSlotTransform(removedCardAnchor);
             removedCardVisual.PlayPlaceAnimation(removedCardAnchor.position, removedCardAnchor.rotation);
             removedCardVisual.SetBasePose(removedCardAnchor.position, removedCardAnchor.rotation);
+        }
+
+        private void MoveRemovedCardVisualToInspectAnchor(bool ownerIsPlayer)
+        {
+            if (removedCardVisual == null) return;
+
+            EnsureThirdRoundAnchors();
+            Transform target = ownerIsPlayer ? thirdRoundPlayerCardAnchor : thirdRoundEnemyCardAnchor;
+            if (target == null) target = removedCardAnchor;
+            if (target == null) return;
+
+            removedCardVisual.facing = ownerIsPlayer ? CardFacing.FacePlayer : CardFacing.FaceEnemy;
+            removedCardVisual.faceTarget = ownerIsPlayer ? playerTransform : opponentTransform;
+            removedCardVisual.SetSlotTransform(target);
+            removedCardVisual.PlayPlaceAnimation(target.position, target.rotation);
+            removedCardVisual.SetBasePose(target.position, target.rotation);
+        }
+
+        private void MoveCardToThirdRoundDiscard(Card3D card)
+        {
+            if (card == null) return;
+
+            EnsureRemovedCardAnchor();
+            Transform target = removedCardAnchor;
+            if (target == null)
+            {
+                DestroyCardIfAlive(card);
+                return;
+            }
+
+            card.owningPile = null;
+            card.facing = CardFacing.FaceDown;
+            card.SetSlotTransform(target);
+            card.PlayPlaceAnimation(target.position, target.rotation);
+            card.SetBasePose(target.position, target.rotation);
+            thirdRoundDiscardedCards.Add(card);
         }
 
         private void ShowRemovedCardArrow(bool show)
@@ -951,6 +1095,10 @@ namespace FirstView
             for (int i = 0; i < enemyHandCards.Count; i++)
                 DestroyCardIfAlive(enemyHandCards[i]);
             enemyHandCards.Clear();
+
+            for (int i = 0; i < thirdRoundDiscardedCards.Count; i++)
+                DestroyCardIfAlive(thirdRoundDiscardedCards[i]);
+            thirdRoundDiscardedCards.Clear();
 
             if (discardPile != null)
                 discardPile.DestroyCardsAndClear();
@@ -1071,7 +1219,7 @@ namespace FirstView
         {
             if (session.Phase == RoundPhase.RemovedCardInspect)
             {
-                if (removedCardInspectRevealed)
+                if (session.RemovedCardInspectOwnerIsPlayer && removedCardInspectRevealed)
                     SkipRemovedCardInspect();
                 return;
             }
