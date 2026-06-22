@@ -69,6 +69,7 @@ namespace FirstView
         public System.Action<Card3D> OnCardDeselected;
         public System.Action<string> OnEnvironmentClicked;
         public System.Action<DiscardPile> OnDiscardPileClicked;
+        public System.Action OnPlayerHandReturnRequested;
 
         private void Awake()
         {
@@ -98,8 +99,15 @@ namespace FirstView
             {
                 if (Keyboard.current.wKey.wasPressedThisFrame)
                     cameraRig.FocusNext();
+                if (Keyboard.current.spaceKey.wasPressedThisFrame)
+                    OnPlayerHandReturnRequested?.Invoke();
                 if (Keyboard.current.sKey.wasPressedThisFrame)
-                    cameraRig.FocusPrev();
+                {
+                    if (cameraRig != null && cameraRig.CurrentFocusId == "DiscardPile")
+                        OnPlayerHandReturnRequested?.Invoke();
+                    else
+                        cameraRig.FocusPrev();
+                }
             }
 #endif
         }

@@ -1143,6 +1143,7 @@ namespace FirstView
             interactor.OnCardDeselected += HandleCardDeselected;
             interactor.OnEnvironmentClicked += HandleEnvironmentClicked;
             interactor.OnDiscardPileClicked += HandleDiscardPileClicked;
+            interactor.OnPlayerHandReturnRequested += HandlePlayerHandReturnRequested;
         }
 
         private void UnwireInteraction()
@@ -1154,6 +1155,7 @@ namespace FirstView
             interactor.OnCardDeselected -= HandleCardDeselected;
             interactor.OnEnvironmentClicked -= HandleEnvironmentClicked;
             interactor.OnDiscardPileClicked -= HandleDiscardPileClicked;
+            interactor.OnPlayerHandReturnRequested -= HandlePlayerHandReturnRequested;
         }
 
         private void HandleCardClicked(Card3D card)
@@ -1187,6 +1189,14 @@ namespace FirstView
         {
             pile.ToggleExpand();
             cameraRig.FocusTo(pile.IsExpanded ? "DiscardPile" : "Hand");
+        }
+
+        private void HandlePlayerHandReturnRequested()
+        {
+            if (discardPile != null)
+                discardPile.Collapse();
+
+            cameraRig.FocusTo("Hand");
         }
 
         private void HandleCardPlaced(Card3D card, CardSlot slot)

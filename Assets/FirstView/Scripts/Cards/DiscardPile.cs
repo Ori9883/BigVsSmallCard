@@ -69,6 +69,13 @@ namespace FirstView
             LayoutCards();
         }
 
+        public void Collapse()
+        {
+            if (!expanded) return;
+            expanded = false;
+            LayoutCards();
+        }
+
         public bool IsExpanded => expanded;
 
         private void LayoutCards()
